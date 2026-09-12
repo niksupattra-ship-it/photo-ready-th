@@ -179,8 +179,6 @@ export default function Home() {
   const [hairstyle, setHairstyle] = useState("original");
   const [processMessage, setProcessMessage] = useState("");
   const [selected, setSelected] = useState("women-suit");
-  const [beforeState, setBefore] = useState(false);
-  const before = aiComposited || beforeState;
   const [zoom, setZoom] = useState(100);
   const [x, setX] = useState(0),
     [y, setY] = useState(0),
@@ -457,7 +455,6 @@ export default function Home() {
       setAiBaseImage(data.image);
       setAiComposited(true);
       setCutout(null);
-      setBefore(false);
       setProcessMessage(
         options?.successMessage || "AI ปรับภาพแบบ V3 สำเร็จแล้ว",
       );
@@ -706,7 +703,7 @@ export default function Home() {
               className="source-photo"
               onClick={() => inputRef.current?.click()}
             >
-              <img src={original} alt="รูปต้นฉบับ" />
+              <img src={baseOriginal} alt="รูปต้นฉบับที่อัปโหลด" />
               <span>
                 <Upload />
                 เปลี่ยนรูป
@@ -719,7 +716,6 @@ export default function Home() {
               onChange={pickFile}
               hidden
             />
-            <div className="before-label">ก่อนปรับ (Before)</div>
             <button
               className="remove-bg"
               onClick={removeBackground}
@@ -786,7 +782,7 @@ export default function Home() {
                   <small>กรุณารอประมาณ 30–90 วินาที</small>
                 </div>
               )}
-              {!before && (
+              {!aiComposited && (
                 <img
                   className="template-layer"
                   src={outfit.image}
@@ -796,7 +792,7 @@ export default function Home() {
                   }}
                 />
               )}
-              {!before && (
+              {!aiComposited && (
                 <>
                   <div className="crop-box" />
                   <div className="guide vertical" />
@@ -820,24 +816,6 @@ export default function Home() {
               )}
             </div>
             <div className="preview-tools">
-              <button onClick={() => setBefore(!before)}>
-                <ImageIcon />
-                เปรียบเทียบ
-              </button>
-              <div className="segmented">
-                <button
-                  className={before ? "active" : ""}
-                  onClick={() => setBefore(true)}
-                >
-                  ก่อนปรับ
-                </button>
-                <button
-                  className={!before ? "active" : ""}
-                  onClick={() => setBefore(false)}
-                >
-                  หลังปรับ
-                </button>
-              </div>
               <div className="zoom">
                 <button onClick={() => setZoom(Math.max(70, zoom - 5))}>
                   <ZoomOut />

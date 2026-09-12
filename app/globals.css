@@ -252,11 +252,6 @@ body {
 .source-photo span svg {
   width: 14px;
 }
-.before-label {
-  text-align: center;
-  font-size: 12px;
-  margin: 8px;
-}
 .file-info {
   border: 1px solid #e0e8f1;
   border-radius: 9px;
@@ -382,35 +377,12 @@ body {
 }
 .preview-tools {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
   padding-top: 9px;
 }
-.preview-tools > button {
-  height: 36px;
-  font-size: 11px;
-}
 .preview-tools svg {
   width: 16px;
-}
-.segmented {
-  background: white;
-  border-radius: 18px;
-  display: flex;
-  padding: 3px;
-  box-shadow: 0 2px 6px #184a7c1c;
-}
-.segmented button {
-  border: 0;
-  height: 30px;
-  min-width: 94px;
-  justify-content: center;
-  background: white;
-}
-.segmented .active {
-  background: #1670e8;
-  color: white;
-  border-radius: 16px;
 }
 .zoom {
   display: flex;
