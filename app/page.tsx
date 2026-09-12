@@ -277,7 +277,8 @@ export default function Home() {
       setX(0);
       setY(0);
       setZoom(100);
-      if (aiComposited) await removeBackground(data.image);
+      if (hairOnly && aiComposited) setCutout(data.image);
+      else if (aiComposited) await removeBackground(data.image);
       else setCutout(null);
       setBefore(false);
       setProcessMessage(
