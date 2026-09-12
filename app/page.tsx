@@ -143,9 +143,9 @@ const hairstyleOptions = [
     return {
       id: `hair-${number}`,
       label: `แบบ ${number}`,
-      // The generated preview and the live edit are both derived from this
-      // exact numbered hairstyle source.
-      image: `/hairstyles/hair-${number}.png`,
+      // Send the exact same reference that the user selected. This prevents
+      // the visible preview and the generated hairstyle from drifting apart.
+      image: `/hairstyle-previews/hair-${number}.png`,
       preview: `/hairstyle-previews/hair-${number}.png`,
     };
   }),
@@ -551,7 +551,9 @@ export default function Home() {
     }
     await aiEdit({
       hairstyleId,
-      source: outfitBaseImage ?? original,
+      // Every hairstyle starts from the immutable completed-outfit portrait.
+      // Never chain a hairstyle result into the next hairstyle request.
+      source: outfitBaseImage ?? aiBaseImage ?? baseOriginal,
       operations: ["hairstyle"],
       successMessage: "เปลี่ยนทรงผมและปรับดำ Pro 50% สำเร็จแล้ว",
     });
