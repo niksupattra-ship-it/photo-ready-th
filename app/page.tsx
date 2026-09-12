@@ -512,7 +512,7 @@ export default function Home() {
       setAiProcessing(false);
     }
   }
-  async function selectOutfit(outfitId: string) {
+  function selectOutfit(outfitId: string) {
     if (aiProcessing) return;
     if (!hasUploaded) {
       setProcessMessage("กรุณาอัปโหลดรูปก่อนเลือกชุด");
@@ -521,8 +521,22 @@ export default function Home() {
     }
     setSelected(outfitId);
     setHairstyle("original");
+    setOriginal(baseOriginal);
+    setAiBaseImage(null);
+    setOutfitBaseImage(null);
+    setAiComposited(false);
+    setCutout(null);
+    setProcessMessage("ตรวจสอบชุดตัวอย่าง แล้วกด “เปลี่ยนชุดด้วย AI”");
+  }
+  async function confirmOutfit() {
+    if (aiProcessing) return;
+    if (!hasUploaded) {
+      setProcessMessage("กรุณาอัปโหลดรูปก่อนเปลี่ยนชุด");
+      inputRef.current?.click();
+      return;
+    }
     const result = await aiEdit({
-      outfitId,
+      outfitId: selected,
       hairstyleId: "original",
       source: baseOriginal,
       operations: [
@@ -839,7 +853,7 @@ export default function Home() {
                   src={outfit.image}
                   alt={outfit.label}
                   style={{
-                    transform: `translateY(${hair * 2}px) scale(${1 + neck / 100})`,
+                    transform: `translateX(-50%) translateY(${hair * 2}px) scale(${1 + neck / 100})`,
                   }}
                 />
               )}
@@ -1113,7 +1127,7 @@ export default function Home() {
               {outfits.map((o) => (
                 <button
                   key={o.id}
-                  onClick={() => void selectOutfit(o.id)}
+                  onClick={() => selectOutfit(o.id)}
                   disabled={aiProcessing}
                   className={`outfit ${selected === o.id ? "selected" : ""} ${o.tone}`}
                 >
@@ -1127,6 +1141,34 @@ export default function Home() {
                 ดูเทมเพลตทั้งหมด<span>›</span>
               </button>
             </div>
+            <button
+              type="button"
+              className="confirm-outfit"
+              onClick={() => void confirmOutfit()}
+              disabled={!hasUploaded || aiProcessing || Boolean(outfitBaseImage)}
+            >
+              {aiProcessing ? (
+                <LoaderCircle className="spin" />
+              ) : outfitBaseImage ? (
+                <Check />
+              ) : (
+                <WandSparkles />
+              )}
+              <span>
+                <b>
+                  {aiProcessing
+                    ? "กำลังเปลี่ยนชุด…"
+                    : outfitBaseImage
+                      ? "เปลี่ยนชุดแล้ว"
+                      : "เปลี่ยนชุดด้วย AI"}
+                </b>
+                <small>
+                  {outfitBaseImage
+                    ? "เลือกทรงผมต่อได้เลย"
+                    : `ใช้ชุด ${outfit.label}`}
+                </small>
+              </span>
+            </button>
             <div className="ready-card">
               <h3>▣ รูปพร้อมใช้ มาตรฐานราชการ</h3>
               <p>
