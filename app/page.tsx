@@ -27,6 +27,8 @@ export default function Home() {
   const inputRef = useRef<HTMLInputElement>(null);
   const dragStart = useRef<{px:number;py:number;x:number;y:number}|null>(null);
   const [original, setOriginal] = useState("/demo/original.png");
+  const [baseOriginal, setBaseOriginal] = useState("/demo/original.png");
+  const [aiComposited, setAiComposited] = useState(false);
   const [cutout, setCutout] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
   const [aiProcessing, setAiProcessing] = useState(false);
@@ -34,7 +36,8 @@ export default function Home() {
   const [hairVolume, setHairVolume] = useState<"ลด"|"คงเดิม"|"เพิ่ม">("คงเดิม");
   const [processMessage, setProcessMessage] = useState("");
   const [selected, setSelected] = useState("women-suit");
-  const [before, setBefore] = useState(false);
+  const [beforeState, setBefore] = useState(false);
+  const before = aiComposited || beforeState;
   const [zoom, setZoom] = useState(100);
   const [x, setX] = useState(0), [y, setY] = useState(0), [head, setHead] = useState(75), [neck, setNeck] = useState(0), [hair, setHair] = useState(0), [skin, setSkin] = useState(0);
   const [bg, setBg] = useState("#1682ee"); const [saved, setSaved] = useState(false);
@@ -60,18 +63,18 @@ export default function Home() {
       setProcessMessage("จัดใบหน้าเข้ากรอบเรียบร้อย");
     }catch(e){setProcessMessage(e instanceof Error?e.message:"วิเคราะห์ใบหน้าไม่สำเร็จ");}
   }
-  function pickFile(e:React.ChangeEvent<HTMLInputElement>){ const f=e.target.files?.[0]; if(f){setOriginal(URL.createObjectURL(f));setCutout(null);setProcessMessage("");} }
+  function pickFile(e:React.ChangeEvent<HTMLInputElement>){ const f=e.target.files?.[0]; if(f){const url=URL.createObjectURL(f);setBaseOriginal(url);setOriginal(url);setAiComposited(false);setCutout(null);setProcessMessage("");} }
   function toggleAi(id:string){setAiSelected(v=>v.includes(id)?v.filter(x=>x!==id):[...v,id]);}
   async function aiEdit(){
     if(!aiSelected.length){setProcessMessage("กรุณาเลือกอย่างน้อย 1 รายการ");return;}
     setAiProcessing(true);setProcessMessage("AI กำลังปรับภาพจริง อาจใช้เวลาประมาณ 30–90 วินาที…");
     try{
-      const source=await fetch(original);const blob=await source.blob();
-      const form=new FormData();form.append("image",blob,"portrait.png");form.append("operations",JSON.stringify(aiSelected));form.append("hairVolume",hairVolume);
+      const [source,outfitSource]=await Promise.all([fetch(baseOriginal),fetch(outfit.image)]);const [blob,outfitBlob]=await Promise.all([source.blob(),outfitSource.blob()]);
+      const form=new FormData();form.append("image",blob,"portrait.png");form.append("outfit",outfitBlob,"outfit-reference.png");form.append("outfitLabel",`${outfit.label} (${outfit.sub})`);form.append("background",bg);form.append("operations",JSON.stringify(aiSelected));form.append("hairVolume",hairVolume);
       const response=await fetch("/api/ai-edit",{method:"POST",body:form});
       const data=await response.json() as {image?:string;error?:string};
       if(!response.ok||!data.image)throw new Error(data.error||"AI ปรับภาพไม่สำเร็จ");
-      setOriginal(data.image);setCutout(null);setBefore(false);setProcessMessage("AI ปรับภาพเรียบร้อยแล้ว กดตัดพื้นหลังเพื่อประกอบชุด");
+      setOriginal(data.image);setAiComposited(true);setCutout(null);setBefore(false);setProcessMessage("AI สร้างภาพสำเร็จแล้ว พร้อมดาวน์โหลด");
     }catch(e){setProcessMessage(e instanceof Error?e.message:"AI ปรับภาพไม่สำเร็จ กรุณาลองอีกครั้ง");}
     finally{setAiProcessing(false);}
   }
@@ -109,8 +112,7 @@ export default function Home() {
     const pw=person.width*scale,ph=person.height*scale;
     ctx.filter=`brightness(${100+skin}%)`;
     ctx.drawImage(person,(900-pw)/2+x*2,(1200-ph)/2+y*2,pw,ph);ctx.filter="none";
-    const cw=972*(1+neck/100),ch=cloth.height*(cw/cloth.width);
-    ctx.drawImage(cloth,(900-cw)/2,1200-ch+330+hair*2,cw,ch);
+    if(!aiComposited){const cw=972*(1+neck/100),ch=cloth.height*(cw/cloth.width);ctx.drawImage(cloth,(900-cw)/2,1200-ch+330+hair*2,cw,ch);}
     const a=document.createElement("a");a.href=canvas.toDataURL("image/jpeg",.94);a.download="รูปพร้อมใช้.jpg";a.click();
   }
 

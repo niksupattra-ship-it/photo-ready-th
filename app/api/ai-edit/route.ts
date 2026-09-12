@@ -16,16 +16,20 @@ export async function POST(request:Request){
     const input=await request.formData();
     const image=input.get("image");
     if(!(image instanceof File))return Response.json({error:"ไม่พบไฟล์รูปภาพ"},{status:400});
+    const outfit=input.get("outfit");
+    if(!(outfit instanceof File))return Response.json({error:"ไม่พบชุดอ้างอิง"},{status:400});
     if(image.size>20*1024*1024)return Response.json({error:"รูปภาพต้องมีขนาดไม่เกิน 20 MB"},{status:413});
     let operations:string[]=[];
     try{operations=JSON.parse(String(input.get("operations")||"[]"));}catch{}
     const chosen=operations.filter(id=>LABELS[id]).map(id=>LABELS[id]);
     if(!chosen.length)return Response.json({error:"กรุณาเลือกรายการที่ต้องการปรับ"},{status:400});
     const hairVolume=String(input.get("hairVolume")||"คงเดิม");
+    const outfitLabel=String(input.get("outfitLabel")||"ชุดที่เลือก");
+    const background=String(input.get("background")||"#1682ee");
     const volumeInstruction=operations.includes("hair-volume")?` Hair volume direction: ${hairVolume==="ลด"?"slightly reduce excessive volume":hairVolume==="เพิ่ม"?"slightly increase thin areas":"keep the current overall volume"}.`:"";
-    const prompt=`Edit this formal front-facing ID portrait with restrained professional retouching. ${chosen.join(" ")}${volumeInstruction} CRITICAL: preserve the person's identity exactly—same facial structure, eyes, eyebrows, nose, lips, expression, age, and recognizable features. Do not beautify, reshape, replace, or regenerate the face. Keep camera angle, crop, clothing, and background unchanged. Make only the requested corrections. The result must look like a genuine studio photograph, not AI-generated.`;
+    const prompt=`Create one finished formal front-facing ID portrait. Image 1 is the person and is the absolute identity reference. Image 2 is clothing reference only: dress the person in ${outfitLabel} matching its collar, lapels, fabric, and proportions. Use a clean solid background color ${background}. ${chosen.join(" ")}${volumeInstruction} Preserve the face from image 1 exactly: identical facial structure, eyes, eyebrows, nose, lips, expression, age, skin texture, and recognizable features. Do not beautify or replace the face. Center the head and torso, show the full head and shoulders, and connect the neck naturally to the selected clothing. Return a finished studio portrait, not a layered mockup.`;
     const body=new FormData();
-    body.append("model","gpt-image-1.5");body.append("image[]",image,image.name||"portrait.png");body.append("prompt",prompt);body.append("input_fidelity","high");body.append("quality","medium");body.append("output_format","png");body.append("size","1024x1536");body.append("n","1");
+    body.append("model","gpt-image-1.5");body.append("image[]",image,image.name||"portrait.png");body.append("image[]",outfit,outfit.name||"outfit-reference.png");body.append("prompt",prompt);body.append("input_fidelity","high");body.append("quality","medium");body.append("output_format","png");body.append("size","1024x1536");body.append("n","1");
     const result=await fetch("https://api.openai.com/v1/images/edits",{method:"POST",headers:{Authorization:`Bearer ${apiKey}`},body});
     const data=await result.json() as {data?:Array<{b64_json?:string}>;error?:{message?:string;code?:string}};
     if(!result.ok){const code=data.error?.code;const friendly=code==="insufficient_quota"?"เครดิต AI ไม่เพียงพอ กรุณาตรวจสอบยอดคงเหลือ":data.error?.message||"บริการ AI ไม่สามารถปรับภาพได้";return Response.json({error:friendly},{status:result.status});}
