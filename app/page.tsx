@@ -40,6 +40,20 @@ const outfits = [
     tone: "suit",
   },
   {
+    id: "job-suit-women-real",
+    label: "สูทหญิงสมจริง",
+    sub: "สมัครงาน · เชิ้ตขาว",
+    image: "/templates/job-suit-women-real.png",
+    tone: "suit",
+  },
+  {
+    id: "job-suit-men-real",
+    label: "สูทชายสมจริง",
+    sub: "สมัครงาน · เชิ้ตขาว",
+    image: "/templates/job-suit-men-real.png",
+    tone: "suit",
+  },
+  {
     id: "job-suit-open-01",
     label: "สูทสมัครงาน 1",
     sub: "ไม่ผูกไท",
