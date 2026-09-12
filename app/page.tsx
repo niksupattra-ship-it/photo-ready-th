@@ -40,6 +40,27 @@ const outfits = [
     tone: "suit",
   },
   {
+    id: "job-suit-open-01",
+    label: "สูทสมัครงาน 1",
+    sub: "ไม่ผูกไท",
+    image: "/templates/job-suit-open-01.png",
+    tone: "suit",
+  },
+  {
+    id: "job-suit-tie",
+    label: "สูทสมัครงาน",
+    sub: "ผูกไท",
+    image: "/templates/job-suit-tie.png",
+    tone: "suit",
+  },
+  {
+    id: "job-suit-open-02",
+    label: "สูทสมัครงาน 2",
+    sub: "ไม่ผูกไท",
+    image: "/templates/job-suit-open-02.png",
+    tone: "suit",
+  },
+  {
     id: "women-student",
     label: "นักศึกษาหญิง",
     sub: "มหาวิทยาลัย",
@@ -65,6 +86,11 @@ const aiOptions = [
     detail: "ลดหรือเพิ่มอย่างเป็นธรรมชาติ",
   },
   {
+    id: "hairstyle",
+    label: "เปลี่ยนทรงผม",
+    detail: "เลือกทรงสุภาพด้วย AI",
+  },
+  {
     id: "skin-light",
     label: "ปรับแสงให้สมดุล",
     detail: "คงผิวและใบหน้าเดิมทั้งหมด",
@@ -74,6 +100,20 @@ const aiOptions = [
     label: "ทำขอบผมให้เนียน",
     detail: "เก็บขอบละเอียด ไม่แข็ง",
   },
+];
+const hairstyleOptions = [
+  { id: "original", label: "ทรงเดิม", image: null, preview: null },
+  ...Array.from({ length: 29 }, (_, index) => {
+    const number = String(index + 1).padStart(2, "0");
+    return {
+      id: `hair-${number}`,
+      label: `แบบ ${number}`,
+      // Send the exact same reference that the user selected. This prevents
+      // the visible preview and the generated hairstyle from drifting apart.
+      image: `/hairstyle-previews/hair-${number}.png`,
+      preview: `/hairstyle-previews/hair-${number}.png`,
+    };
+  }),
 ];
 
 function Control({
@@ -112,6 +152,7 @@ function Control({
 
 export default function Home() {
   const inputRef = useRef<HTMLInputElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const dragStart = useRef<{
     px: number;
     py: number;
@@ -120,7 +161,9 @@ export default function Home() {
   } | null>(null);
   const [original, setOriginal] = useState("/demo/original.png");
   const [baseOriginal, setBaseOriginal] = useState("/demo/original.png");
+  const [hasUploaded, setHasUploaded] = useState(false);
   const [aiBaseImage, setAiBaseImage] = useState<string | null>(null);
+  const [outfitBaseImage, setOutfitBaseImage] = useState<string | null>(null);
   const [aiComposited, setAiComposited] = useState(false);
   const [cutout, setCutout] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
@@ -132,10 +175,13 @@ export default function Home() {
   const [hairVolume, setHairVolume] = useState<"ลด" | "คงเดิม" | "เพิ่ม">(
     "คงเดิม",
   );
+  const [skinStyle, setSkinStyle] = useState<
+    "ธรรมชาติ" | "สดใส" | "สตูดิโอ"
+  >("ธรรมชาติ");
+  const [skinStrength, setSkinStrength] = useState(15);
+  const [hairstyle, setHairstyle] = useState("original");
   const [processMessage, setProcessMessage] = useState("");
   const [selected, setSelected] = useState("women-suit");
-  const [beforeState, setBefore] = useState(false);
-  const before = aiComposited || beforeState;
   const [zoom, setZoom] = useState(100);
   const [x, setX] = useState(0),
     [y, setY] = useState(0),
@@ -156,8 +202,12 @@ export default function Home() {
     setSkin(0);
     setZoom(100);
   }
-  async function auto() {
-    setProcessMessage("กำลังตรวจตำแหน่งใบหน้า…");
+  async function auto(source = original, outfitPreview = false) {
+    setProcessMessage(
+      outfitPreview
+        ? "กำลังจัดตัวอย่างให้อยู่ในตำแหน่งพร้อมใช้…"
+        : "กำลังตรวจตำแหน่งใบหน้า…",
+    );
     try {
       const [{ FilesetResolver, FaceDetector }, img] = await Promise.all([
         import("@mediapipe/tasks-vision"),
@@ -165,7 +215,7 @@ export default function Home() {
           const el = new Image();
           el.onload = () => resolve(el);
           el.onerror = reject;
-          el.src = original;
+          el.src = source;
         }),
       ]);
       const vision = await FilesetResolver.forVisionTasks(
@@ -183,20 +233,51 @@ export default function Home() {
       detector.close();
       if (!face)
         throw new Error("ไม่พบใบหน้า กรุณาใช้รูปหน้าตรงที่เห็นใบหน้าชัด");
-      const centerX = (face.originX + face.width / 2) / img.naturalWidth;
-      const centerY = (face.originY + face.height / 2) / img.naturalHeight;
-      const idealZoom = Math.max(
-        75,
-        Math.min(120, Math.round(38 / (face.height / img.naturalHeight))),
+      const stageWidth = stageRef.current?.clientWidth || 600;
+      const stageHeight = stageRef.current?.clientHeight || 600;
+      const coverScale = Math.max(
+        stageWidth / img.naturalWidth,
+        stageHeight / img.naturalHeight,
       );
-      setX(Math.round((0.5 - centerX) * 260));
-      setY(Math.round((0.34 - centerY) * 260));
+      const displayWidth = img.naturalWidth * coverScale;
+      const displayHeight = img.naturalHeight * coverScale;
+      const faceCenterX =
+        (stageWidth - displayWidth) / 2 +
+        (face.originX + face.width / 2) * coverScale;
+      const faceCenterY =
+        (stageHeight - displayHeight) / 2 +
+        (face.originY + face.height / 2) * coverScale;
+      const targetFaceHeight = stageHeight * 0.3;
+      const idealZoom = Math.max(
+        70,
+        Math.min(
+          300,
+          Math.round((targetFaceHeight / (face.height * coverScale)) * 100),
+        ),
+      );
+      const scale = idealZoom / 100;
+      setX(
+        Math.round(
+          stageWidth / 2 -
+            (stageWidth / 2 + (faceCenterX - stageWidth / 2) * scale),
+        ),
+      );
+      setY(
+        Math.round(
+          stageHeight * 0.35 -
+            (stageHeight / 2 + (faceCenterY - stageHeight / 2) * scale),
+        ),
+      );
       setZoom(idealZoom);
       setHead(76);
       setNeck(0);
       setHair(0);
       setSkin(3);
-      setProcessMessage("จัดใบหน้าเข้ากรอบเรียบร้อย");
+      setProcessMessage(
+        outfitPreview
+          ? "จัดตัวอย่างชุดในตำแหน่งพร้อมใช้แล้ว กดเปลี่ยนชุดเพื่อยืนยัน"
+          : "จัดใบหน้าเข้ากรอบเรียบร้อย",
+      );
     } catch (e) {
       setProcessMessage(
         e instanceof Error ? e.message : "วิเคราะห์ใบหน้าไม่สำเร็จ",
@@ -209,7 +290,9 @@ export default function Home() {
       const url = URL.createObjectURL(f);
       setBaseOriginal(url);
       setOriginal(url);
+      setHasUploaded(true);
       setAiBaseImage(null);
+      setOutfitBaseImage(null);
       setAiComposited(false);
       setCutout(null);
       setProcessMessage("");
@@ -340,17 +423,35 @@ export default function Home() {
     if (!blob) throw new Error("สร้างภาพโปร่งใสไม่ได้");
     return URL.createObjectURL(blob);
   }
-  async function aiEdit() {
-    if (!aiSelected.length) {
+  async function aiEdit(options?: {
+    outfitId?: string;
+    hairstyleId?: string;
+    operations?: string[];
+    source?: string;
+    successMessage?: string;
+  }) {
+    const operations = options?.operations ?? aiSelected;
+    const targetOutfit =
+      outfits.find((item) => item.id === options?.outfitId) ?? outfit;
+    const targetHairstyle =
+      hairstyleOptions.find((item) => item.id === options?.hairstyleId) ??
+      hairstyleOptions.find((item) => item.id === hairstyle);
+    if (!operations.length) {
       setProcessMessage("กรุณาเลือกอย่างน้อย 1 รายการ");
       return;
     }
     setAiProcessing(true);
-    setProcessMessage("AI กำลังปรับภาพจริง อาจใช้เวลาประมาณ 30–90 วินาที…");
+    setProcessMessage(
+      operations.length === 1 && operations[0] === "hairstyle"
+        ? "AI กำลังเปลี่ยนทรงผมและปรับสีดำ Pro 50%…"
+        : operations.includes("outfit")
+          ? "AI กำลังเปลี่ยนชุดและปรับภาพให้สมดุล…"
+          : "AI กำลังปรับภาพจริง…",
+    );
     try {
       const [source, outfitSource] = await Promise.all([
-        fetch(baseOriginal),
-        fetch(outfit.image),
+        fetch(options?.source ?? baseOriginal),
+        fetch(targetOutfit.image),
       ]);
       const [blob, outfitBlob] = await Promise.all([
         source.blob(),
@@ -359,10 +460,31 @@ export default function Home() {
       const form = new FormData();
       form.append("image", blob, "portrait.png");
       form.append("outfit", outfitBlob, "outfit-reference.png");
-      form.append("outfitLabel", `${outfit.label} (${outfit.sub})`);
+      form.append(
+        "outfitLabel",
+        `${targetOutfit.label} (${targetOutfit.sub})`,
+      );
       form.append("background", bg);
-      form.append("operations", JSON.stringify(aiSelected));
+      form.append("operations", JSON.stringify(operations));
+      form.append(
+        "editMode",
+        operations.length === 1 && operations[0] === "hairstyle"
+          ? "hairstyle-only"
+          : "full",
+      );
       form.append("hairVolume", hairVolume);
+      form.append("skinStyle", skinStyle);
+      form.append("skinStrength", String(skinStrength));
+      form.append("hairstyle", targetHairstyle?.label || "ทรงเดิม");
+      if (targetHairstyle?.image) {
+        const hairstyleSource = await fetch(targetHairstyle.image);
+        const hairstyleBlob = await hairstyleSource.blob();
+        form.append(
+          "hairstyleRef",
+          hairstyleBlob,
+          `${targetHairstyle.id}.png`,
+        );
+      }
       const response = await fetch("/api/ai-edit", {
         method: "POST",
         body: form,
@@ -377,53 +499,91 @@ export default function Home() {
       setAiBaseImage(data.image);
       setAiComposited(true);
       setCutout(null);
-      setBefore(false);
-      setProcessMessage("AI ปรับภาพแบบ V3 สำเร็จแล้ว");
+      setProcessMessage(
+        options?.successMessage || "AI ปรับภาพแบบ V3 สำเร็จแล้ว",
+      );
+      return data.image;
     } catch (e) {
       setProcessMessage(
         e instanceof Error ? e.message : "AI ปรับภาพไม่สำเร็จ กรุณาลองอีกครั้ง",
       );
+      return null;
     } finally {
       setAiProcessing(false);
     }
   }
-  async function changeBackground(color: string) {
-    if (!aiComposited || !aiBaseImage) {
-      setBg(color);
+  async function selectOutfit(outfitId: string) {
+    if (aiProcessing) return;
+    if (!hasUploaded) {
+      setProcessMessage("กรุณาอัปโหลดรูปก่อนเลือกชุด");
+      inputRef.current?.click();
       return;
     }
-    if (backgroundProcessing || color === bg) return;
-    setBackgroundProcessing(true);
-    setProcessMessage("AI กำลังเปลี่ยนเฉพาะพื้นหลังและเก็บขอบภาพ…");
-    try {
-      const source = await fetch(aiBaseImage);
-      const blob = await source.blob();
-      const form = new FormData();
-      form.append("image", blob, "v3-portrait.png");
-      form.append("background", color);
-      const response = await fetch("/api/change-background", {
-        method: "POST",
-        body: form,
-      });
-      const data = (await response.json()) as {
-        image?: string;
-        error?: string;
-      };
-      if (!response.ok || !data.image)
-        throw new Error(data.error || "AI เปลี่ยนพื้นหลังไม่สำเร็จ");
-      setOriginal(data.image);
-      setCutout(null);
-      setBg(color);
-      setProcessMessage("AI เปลี่ยนพื้นหลังและเก็บขอบเรียบร้อยแล้ว");
-    } catch (e) {
-      setProcessMessage(
-        e instanceof Error
-          ? e.message
-          : "AI เปลี่ยนพื้นหลังไม่สำเร็จ กรุณาลองอีกครั้ง",
-      );
-    } finally {
-      setBackgroundProcessing(false);
+    setSelected(outfitId);
+    setHairstyle("original");
+    setOriginal(baseOriginal);
+    setAiBaseImage(null);
+    setOutfitBaseImage(null);
+    setAiComposited(false);
+    setCutout(null);
+    setProcessMessage("ตรวจสอบชุดตัวอย่าง แล้วกด “เปลี่ยนชุดด้วย AI”");
+    await auto(baseOriginal, true);
+  }
+  async function confirmOutfit() {
+    if (aiProcessing) return;
+    if (!hasUploaded) {
+      setProcessMessage("กรุณาอัปโหลดรูปก่อนเปลี่ยนชุด");
+      inputRef.current?.click();
+      return;
     }
+    const result = await aiEdit({
+      outfitId: selected,
+      hairstyleId: "original",
+      source: baseOriginal,
+      operations: ["outfit"],
+      successMessage: "เปลี่ยนชุดด้วย AI สำเร็จแล้ว เลือกทรงผมต่อได้เลย",
+    });
+    if (result) {
+      setOutfitBaseImage(result);
+      setX(0);
+      setY(0);
+      setZoom(100);
+    }
+  }
+  async function selectHairstyle(hairstyleId: string) {
+    if (aiProcessing) return;
+    if (!hasUploaded) {
+      setProcessMessage("กรุณาอัปโหลดรูปก่อนเลือกทรงผม");
+      inputRef.current?.click();
+      return;
+    }
+    if (!outfitBaseImage) {
+      setProcessMessage("กรุณาเลือกชุดและรอ AI เปลี่ยนชุดให้เสร็จก่อน");
+      return;
+    }
+    setHairstyle(hairstyleId);
+    if (hairstyleId === "original") {
+      setOriginal(outfitBaseImage);
+      setAiBaseImage(outfitBaseImage);
+      setProcessMessage("เลือกทรงผมเดิมแล้ว");
+      return;
+    }
+    await aiEdit({
+      hairstyleId,
+      // Every hairstyle starts from the immutable completed-outfit portrait.
+      // Never chain a hairstyle result into the next hairstyle request.
+      source: outfitBaseImage ?? aiBaseImage ?? baseOriginal,
+      operations: ["hairstyle"],
+      successMessage: "เปลี่ยนทรงผมและปรับดำ Pro 50% สำเร็จแล้ว",
+    });
+  }
+  function changeBackground(color: string) {
+    setBg(color);
+    setProcessMessage(
+      aiComposited
+        ? "เปลี่ยนสีพื้นหลังแล้ว โดยไม่ใช้ AI"
+        : "เลือกสีพื้นหลังสำหรับภาพแล้ว",
+    );
   }
   async function removeBackground() {
     setProcessing(true);
@@ -463,16 +623,20 @@ export default function Home() {
     ctx.fillRect(0, 0, 900, 1200);
     const scale =
       (aiComposited
-        ? Math.min(900 / person.width, 1200 / person.height)
-        : Math.max(900 / person.width, 1200 / person.height)) *
+        ? Math.max(900 / person.width, 1200 / person.height)
+        : Math.min(900 / person.width, 1200 / person.height)) *
       (zoom / 100);
     const pw = person.width * scale,
       ph = person.height * scale;
+    const previewWidth = stageRef.current?.clientWidth || 450;
+    const previewHeight = stageRef.current?.clientHeight || 600;
+    const exportX = x * (900 / previewWidth);
+    const exportY = y * (1200 / previewHeight);
     ctx.filter = `brightness(${100 + skin}%)`;
     ctx.drawImage(
       person,
-      (900 - pw) / 2 + x * 2,
-      (1200 - ph) / 2 + y * 2,
+      (900 - pw) / 2 + exportX,
+      (1200 - ph) / 2 + exportY,
       pw,
       ph,
     );
@@ -574,7 +738,7 @@ export default function Home() {
               className="source-photo"
               onClick={() => inputRef.current?.click()}
             >
-              <img src={original} alt="รูปต้นฉบับ" />
+              <img src={baseOriginal} alt="รูปต้นฉบับที่อัปโหลด" />
               <span>
                 <Upload />
                 เปลี่ยนรูป
@@ -587,7 +751,6 @@ export default function Home() {
               onChange={pickFile}
               hidden
             />
-            <div className="before-label">ก่อนปรับ (Before)</div>
             <button
               className="remove-bg"
               onClick={removeBackground}
@@ -619,6 +782,7 @@ export default function Home() {
           </aside>
           <section className="preview-panel card">
             <div
+              ref={stageRef}
               className="photo-stage"
               style={{ background: bg }}
               onPointerDown={(e) => {
@@ -646,24 +810,27 @@ export default function Home() {
                   filter: `brightness(${100 + skin}%)`,
                 }}
               />
-              {backgroundProcessing && (
+              {(aiProcessing || backgroundProcessing) && (
                 <div className="background-ai-loading">
                   <LoaderCircle className="spin" />
-                  <b>AI กำลังเปลี่ยนพื้นหลังทั้งภาพ…</b>
+                  <b>{processMessage || "AI กำลังประมวลผลภาพ…"}</b>
                   <small>กรุณารอประมาณ 30–90 วินาที</small>
+                  <span className="ai-loading-track" aria-hidden="true">
+                    <span />
+                  </span>
                 </div>
               )}
-              {!before && (
+              {!aiComposited && (
                 <img
                   className="template-layer"
                   src={outfit.image}
                   alt={outfit.label}
                   style={{
-                    transform: `translateY(${hair * 2}px) scale(${1 + neck / 100})`,
+                    transform: `translateX(-50%) translateY(${hair * 2}px) scale(${1 + neck / 100})`,
                   }}
                 />
               )}
-              {!before && (
+              {!aiComposited && (
                 <>
                   <div className="crop-box" />
                   <div className="guide vertical" />
@@ -687,30 +854,12 @@ export default function Home() {
               )}
             </div>
             <div className="preview-tools">
-              <button onClick={() => setBefore(!before)}>
-                <ImageIcon />
-                เปรียบเทียบ
-              </button>
-              <div className="segmented">
-                <button
-                  className={before ? "active" : ""}
-                  onClick={() => setBefore(true)}
-                >
-                  ก่อนปรับ
-                </button>
-                <button
-                  className={!before ? "active" : ""}
-                  onClick={() => setBefore(false)}
-                >
-                  หลังปรับ
-                </button>
-              </div>
               <div className="zoom">
                 <button onClick={() => setZoom(Math.max(70, zoom - 5))}>
                   <ZoomOut />
                 </button>
                 <b>{zoom}%</b>
-                <button onClick={() => setZoom(Math.min(130, zoom + 5))}>
+                <button onClick={() => setZoom(Math.min(300, zoom + 5))}>
                   <ZoomIn />
                 </button>
               </div>
@@ -730,13 +879,34 @@ export default function Home() {
                 รีเซ็ตทั้งหมด
               </button>
             </div>
-            <button className="auto-button" onClick={auto}>
+            <button className="auto-button" onClick={() => void auto()}>
               <WandSparkles />
               <span>
                 <b>จัดตำแหน่งอัตโนมัติ</b>
                 <small>จัดขนาดใบหน้าและตำแหน่งชุด</small>
               </span>
               <b>›</b>
+            </button>
+            <button
+              type="button"
+              className="confirm-outfit"
+              onClick={() => void confirmOutfit()}
+              disabled={!hasUploaded || aiProcessing || Boolean(outfitBaseImage)}
+            >
+              {aiProcessing ? (
+                <LoaderCircle className="spin" />
+              ) : outfitBaseImage ? (
+                <Check />
+              ) : (
+                <WandSparkles />
+              )}
+              <b>
+                {aiProcessing
+                  ? "กำลังเปลี่ยนชุด…"
+                  : outfitBaseImage
+                    ? "เปลี่ยนชุดสำเร็จ"
+                    : "ยืนยันเปลี่ยนชุด"}
+              </b>
             </button>
             <section className="ai-editor">
               <div className="ai-editor-title">
@@ -778,9 +948,85 @@ export default function Home() {
                   ))}
                 </div>
               )}
+              {aiSelected.includes("hairstyle") && (
+                <div className="hairstyle-control">
+                  <div className="hairstyle-heading">
+                    <b>เลือกทรงผม</b>
+                    <small>
+                      {outfitBaseImage
+                        ? "เลือกแล้ว AI จะปรับทันที พร้อมสีผมดำ Pro 50%"
+                        : "กรุณาเลือกชุดและรอให้ AI เปลี่ยนชุดเสร็จก่อน"}
+                    </small>
+                  </div>
+                  <div
+                    className={`hairstyle-options${outfitBaseImage ? "" : " locked"}`}
+                    aria-disabled={!outfitBaseImage}
+                  >
+                    {hairstyleOptions.map((style) => (
+                      <button
+                        type="button"
+                        key={style.id}
+                        className={hairstyle === style.id ? "active" : ""}
+                        onClick={() => void selectHairstyle(style.id)}
+                        disabled={aiProcessing || !outfitBaseImage}
+                      >
+                        {style.image ? (
+                          <img
+                            src={style.preview || style.image}
+                            alt={`ตัวอย่างทรงผม ${style.label}`}
+                          />
+                        ) : (
+                          <UserRound />
+                        )}
+                        <span>{style.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {aiSelected.includes("skin-light") && (
+                <div className="skin-style-control">
+                  <div className="skin-style-title">
+                    <span>
+                      <b>แสงและผิวธรรมชาติ</b>
+                      <small>รักษารูขุมขนและหน้าเดิม</small>
+                    </span>
+                    <output>{skinStrength}%</output>
+                  </div>
+                  <div className="skin-style-presets">
+                    {(["ธรรมชาติ", "สดใส", "สตูดิโอ"] as const).map(
+                      (style) => (
+                        <button
+                          type="button"
+                          key={style}
+                          className={skinStyle === style ? "active" : ""}
+                          onClick={() => setSkinStyle(style)}
+                        >
+                          {style}
+                        </button>
+                      ),
+                    )}
+                  </div>
+                  <label>
+                    <span>ระดับการปรับ</span>
+                    <input
+                      aria-label="ระดับการปรับแสงและผิว"
+                      type="range"
+                      min="0"
+                      max="100"
+                      step="5"
+                      value={skinStrength}
+                      onChange={(e) => setSkinStrength(Number(e.target.value))}
+                    />
+                  </label>
+                  <small className="skin-apply-hint">
+                    ตั้งค่าแล้วกด “ปรับด้วย AI” ด้านล่างเพื่อใช้กับภาพ
+                  </small>
+                </div>
+              )}
               <button
                 className="run-ai"
-                onClick={aiEdit}
+                onClick={() => void aiEdit()}
                 disabled={aiProcessing}
               >
                 {aiProcessing ? (
@@ -875,37 +1121,18 @@ export default function Home() {
               {outfits.map((o) => (
                 <button
                   key={o.id}
-                  onClick={() => setSelected(o.id)}
+                  onClick={() => void selectOutfit(o.id)}
+                  disabled={aiProcessing}
                   className={`outfit ${selected === o.id ? "selected" : ""} ${o.tone}`}
                 >
                   <img src={o.image} alt={o.label} />
                   <b>{o.label}</b>
-                  <small>({o.sub})</small>
                 </button>
               ))}
               <button className="all-outfits">
                 <UserRound />
                 ดูเทมเพลตทั้งหมด<span>›</span>
               </button>
-            </div>
-            <div className="ready-card">
-              <h3>▣ รูปพร้อมใช้ มาตรฐานราชการ</h3>
-              <p>
-                <Check />
-                ขนาดและสัดส่วนถูกต้องตามระเบียบ
-              </p>
-              <p>
-                <Check />
-                พื้นหลังสีมาตรฐาน
-              </p>
-              <p>
-                <Check />
-                แต่งกายถูกต้องตามประเภท
-              </p>
-              <p>
-                <Check />
-                ใช้ได้ทั้งสมัครงานและราชการ
-              </p>
             </div>
           </div>
         </section>
