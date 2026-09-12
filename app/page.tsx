@@ -132,6 +132,10 @@ export default function Home() {
   const [hairVolume, setHairVolume] = useState<"ลด" | "คงเดิม" | "เพิ่ม">(
     "คงเดิม",
   );
+  const [skinStyle, setSkinStyle] = useState<
+    "ธรรมชาติ" | "สดใส" | "สตูดิโอ"
+  >("ธรรมชาติ");
+  const [skinStrength, setSkinStrength] = useState(15);
   const [processMessage, setProcessMessage] = useState("");
   const [selected, setSelected] = useState("women-suit");
   const [beforeState, setBefore] = useState(false);
@@ -363,6 +367,8 @@ export default function Home() {
       form.append("background", bg);
       form.append("operations", JSON.stringify(aiSelected));
       form.append("hairVolume", hairVolume);
+      form.append("skinStyle", skinStyle);
+      form.append("skinStrength", String(skinStrength));
       const response = await fetch("/api/ai-edit", {
         method: "POST",
         body: form,
@@ -776,6 +782,43 @@ export default function Home() {
                       {v}
                     </button>
                   ))}
+                </div>
+              )}
+              {aiSelected.includes("skin-light") && (
+                <div className="skin-style-control">
+                  <div className="skin-style-title">
+                    <span>
+                      <b>แสงและผิวธรรมชาติ</b>
+                      <small>รักษารูขุมขนและหน้าเดิม</small>
+                    </span>
+                    <output>{skinStrength}%</output>
+                  </div>
+                  <div className="skin-style-presets">
+                    {(["ธรรมชาติ", "สดใส", "สตูดิโอ"] as const).map(
+                      (style) => (
+                        <button
+                          type="button"
+                          key={style}
+                          className={skinStyle === style ? "active" : ""}
+                          onClick={() => setSkinStyle(style)}
+                        >
+                          {style}
+                        </button>
+                      ),
+                    )}
+                  </div>
+                  <label>
+                    <span>ระดับการปรับ</span>
+                    <input
+                      aria-label="ระดับการปรับแสงและผิว"
+                      type="range"
+                      min="0"
+                      max="35"
+                      step="5"
+                      value={skinStrength}
+                      onChange={(e) => setSkinStrength(Number(e.target.value))}
+                    />
+                  </label>
                 </div>
               )}
               <button
