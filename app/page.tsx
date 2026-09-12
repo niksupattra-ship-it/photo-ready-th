@@ -388,8 +388,11 @@ export default function Home() {
     }
   }
   async function changeBackground(color: string) {
-    setBg(color);
-    if (!aiComposited || !aiBaseImage || backgroundProcessing) return;
+    if (!aiComposited || !aiBaseImage) {
+      setBg(color);
+      return;
+    }
+    if (backgroundProcessing || color === bg) return;
     setBackgroundProcessing(true);
     setProcessMessage("AI กำลังเปลี่ยนเฉพาะพื้นหลังและเก็บขอบภาพ…");
     try {
@@ -410,6 +413,7 @@ export default function Home() {
         throw new Error(data.error || "AI เปลี่ยนพื้นหลังไม่สำเร็จ");
       setOriginal(data.image);
       setCutout(null);
+      setBg(color);
       setProcessMessage("AI เปลี่ยนพื้นหลังและเก็บขอบเรียบร้อยแล้ว");
     } catch (e) {
       setProcessMessage(
@@ -634,7 +638,7 @@ export default function Home() {
               }}
             >
               <img
-                className="person-layer"
+                className={`person-layer ${aiComposited ? "ai-result" : ""}`}
                 src={shownSrc}
                 alt="ภาพลูกค้า"
                 style={{
@@ -642,6 +646,13 @@ export default function Home() {
                   filter: `brightness(${100 + skin}%)`,
                 }}
               />
+              {backgroundProcessing && (
+                <div className="background-ai-loading">
+                  <LoaderCircle className="spin" />
+                  <b>AI กำลังเปลี่ยนพื้นหลังทั้งภาพ…</b>
+                  <small>กรุณารอประมาณ 30–90 วินาที</small>
+                </div>
+              )}
               {!before && (
                 <img
                   className="template-layer"
