@@ -1,7 +1,7 @@
 export const runtime = "nodejs";
 
 const LABELS:Record<string,string>={
-  outfit:"Change the clothing to match image 2 exactly while preserving the person.",
+  outfit:"EDIT THE PROVIDED PHOTOGRAPH; DO NOT CREATE A NEW PERSON. Change only the clothing to match image 2 exactly. Copy the original face, forehead, ears, hair, and visible skin from image 1 as protected photographic source pixels; do not synthesize, redraw, restore, enhance, relight, or reinterpret them. Render the garment as real photographed fabric with visible grain, weave, seams, subtle wrinkles, tonal variation, and natural camera noise; never smooth CGI, waxy, painted, rubber, or plastic material.",
   neck:"Make the visible neck anatomically correct for this adult: centered under the jaw, naturally proportioned in width and length, and connected continuously to both the unchanged head and the shoulders. Never make the neck too thin, too long, detached, or mismatched in scale.",
   shoulders:"Level the left and right shoulders naturally while keeping realistic posture and body proportions.",
   flyaways:"Remove only distracting flyaway and stray hairs while preserving the hairstyle.",
@@ -45,7 +45,7 @@ export async function POST(request:Request){
     const hairstyleOnly=editMode==="hairstyle-only"&&useHairstyleReference;
     const prompt=hairstyleOnly?hairOnlyPrompt:fullPrompt;
     const body=new FormData();
-    body.append("model","gpt-image-1.5");body.append("image[]",image,image.name||"portrait.png");if(hairstyleOnly){body.append("image[]",hairstyleRef,hairstyleRef.name||"hairstyle-reference.png");}else{body.append("image[]",outfit,outfit.name||"outfit-reference.png");if(useHairstyleReference)body.append("image[]",hairstyleRef,hairstyleRef.name||"hairstyle-reference.png");}body.append("prompt",prompt);body.append("input_fidelity","high");body.append("quality","high");body.append("output_format","png");body.append("background","transparent");body.append("size","1024x1536");body.append("n","1");
+    body.append("model","gpt-image-1.5");body.append("image[]",image,image.name||"portrait.png");if(hairstyleOnly){body.append("image[]",hairstyleRef,hairstyleRef.name||"hairstyle-reference.png");}else{body.append("image[]",outfit,outfit.name||"outfit-reference.png");if(useHairstyleReference)body.append("image[]",hairstyleRef,hairstyleRef.name||"hairstyle-reference.png");}body.append("prompt",prompt);body.append("input_fidelity","high");body.append("quality",hairstyleOnly?"high":"medium");body.append("output_format","png");body.append("background","transparent");body.append("size","1024x1536");body.append("n","1");
     const result=await fetch("https://api.openai.com/v1/images/edits",{method:"POST",headers:{Authorization:`Bearer ${apiKey}`},body});
     const data=await result.json() as {data?:Array<{b64_json?:string}>;error?:{message?:string;code?:string}};
     if(!result.ok){const code=data.error?.code;const friendly=code==="insufficient_quota"?"เครดิต AI ไม่เพียงพอ กรุณาตรวจสอบยอดคงเหลือ":data.error?.message||"บริการ AI ไม่สามารถปรับภาพได้";return Response.json({error:friendly},{status:result.status});}

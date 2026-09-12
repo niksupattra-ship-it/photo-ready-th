@@ -540,10 +540,7 @@ export default function Home() {
       outfitId: selected,
       hairstyleId: "original",
       source: baseOriginal,
-      operations: [
-        "outfit",
-        ...aiSelected.filter((id) => id !== "hairstyle"),
-      ],
+      operations: ["outfit"],
       successMessage: "เปลี่ยนชุดด้วย AI สำเร็จแล้ว เลือกทรงผมต่อได้เลย",
     });
     if (result) {
