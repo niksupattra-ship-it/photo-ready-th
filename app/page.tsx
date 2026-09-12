@@ -535,18 +535,20 @@ export default function Home() {
   }
   async function selectHairstyle(hairstyleId: string) {
     if (aiProcessing) return;
-    setHairstyle(hairstyleId);
-    if (hairstyleId === "original") {
-      if (outfitBaseImage) {
-        setOriginal(outfitBaseImage);
-        setAiBaseImage(outfitBaseImage);
-      }
-      setProcessMessage("เลือกทรงผมเดิมแล้ว");
-      return;
-    }
     if (!hasUploaded) {
       setProcessMessage("กรุณาอัปโหลดรูปก่อนเลือกทรงผม");
       inputRef.current?.click();
+      return;
+    }
+    if (!outfitBaseImage) {
+      setProcessMessage("กรุณาเลือกชุดและรอ AI เปลี่ยนชุดให้เสร็จก่อน");
+      return;
+    }
+    setHairstyle(hairstyleId);
+    if (hairstyleId === "original") {
+      setOriginal(outfitBaseImage);
+      setAiBaseImage(outfitBaseImage);
+      setProcessMessage("เลือกทรงผมเดิมแล้ว");
       return;
     }
     await aiEdit({
@@ -943,17 +945,22 @@ export default function Home() {
                   <div className="hairstyle-heading">
                     <b>เลือกทรงผม</b>
                     <small>
-                      เลือกแล้ว AI จะปรับทันที พร้อมสีผมดำ Pro 50%
+                      {outfitBaseImage
+                        ? "เลือกแล้ว AI จะปรับทันที พร้อมสีผมดำ Pro 50%"
+                        : "กรุณาเลือกชุดและรอให้ AI เปลี่ยนชุดเสร็จก่อน"}
                     </small>
                   </div>
-                  <div className="hairstyle-options">
+                  <div
+                    className={`hairstyle-options${outfitBaseImage ? "" : " locked"}`}
+                    aria-disabled={!outfitBaseImage}
+                  >
                     {hairstyleOptions.map((style) => (
                       <button
                         type="button"
                         key={style.id}
                         className={hairstyle === style.id ? "active" : ""}
                         onClick={() => void selectHairstyle(style.id)}
-                        disabled={aiProcessing}
+                        disabled={aiProcessing || !outfitBaseImage}
                       >
                         {style.image ? (
                           <img

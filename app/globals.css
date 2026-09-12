@@ -1009,6 +1009,15 @@ body {
   color: #0b62cb;
   font-weight: 800;
 }
+
+.hairstyle-options.locked {
+  opacity: 0.55;
+}
+
+.hairstyle-options button:disabled {
+  cursor: not-allowed;
+  filter: grayscale(0.35);
+}
 .skin-style-title,
 .skin-style-control label {
   display: flex;
