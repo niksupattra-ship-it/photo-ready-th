@@ -54,6 +54,27 @@ const outfits = [
     tone: "suit",
   },
   {
+    id: "job-white-shirt-women",
+    label: "เชิ้ตขาวหญิง",
+    sub: "สมัครงาน",
+    image: "/templates/job-white-shirt-women.png",
+    tone: "suit",
+  },
+  {
+    id: "job-white-shirt-men",
+    label: "เชิ้ตขาวชาย",
+    sub: "สมัครงาน",
+    image: "/templates/job-white-shirt-men.png",
+    tone: "suit",
+  },
+  {
+    id: "job-navy-suit-tie-men",
+    label: "สูทกรมชาย",
+    sub: "สมัครงาน · ผูกไท",
+    image: "/templates/job-navy-suit-tie-men.png",
+    tone: "suit",
+  },
+  {
     id: "job-suit-open-01",
     label: "สูทสมัครงาน 1",
     sub: "ไม่ผูกไท",
