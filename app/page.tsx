@@ -237,8 +237,12 @@ export default function Home() {
     setSkin(0);
     setZoom(100);
   }
-  async function auto() {
-    setProcessMessage("กำลังตรวจตำแหน่งใบหน้า…");
+  async function auto(source = original, outfitPreview = false) {
+    setProcessMessage(
+      outfitPreview
+        ? "กำลังจัดตัวอย่างให้อยู่ในตำแหน่งพร้อมใช้…"
+        : "กำลังตรวจตำแหน่งใบหน้า…",
+    );
     try {
       const [{ FilesetResolver, FaceDetector }, img] = await Promise.all([
         import("@mediapipe/tasks-vision"),
@@ -246,7 +250,7 @@ export default function Home() {
           const el = new Image();
           el.onload = () => resolve(el);
           el.onerror = reject;
-          el.src = original;
+          el.src = source;
         }),
       ]);
       const vision = await FilesetResolver.forVisionTasks(
@@ -264,20 +268,51 @@ export default function Home() {
       detector.close();
       if (!face)
         throw new Error("ไม่พบใบหน้า กรุณาใช้รูปหน้าตรงที่เห็นใบหน้าชัด");
-      const centerX = (face.originX + face.width / 2) / img.naturalWidth;
-      const centerY = (face.originY + face.height / 2) / img.naturalHeight;
-      const idealZoom = Math.max(
-        75,
-        Math.min(120, Math.round(38 / (face.height / img.naturalHeight))),
+      const stageWidth = stageRef.current?.clientWidth || 600;
+      const stageHeight = stageRef.current?.clientHeight || 600;
+      const coverScale = Math.max(
+        stageWidth / img.naturalWidth,
+        stageHeight / img.naturalHeight,
       );
-      setX(Math.round((0.5 - centerX) * 260));
-      setY(Math.round((0.34 - centerY) * 260));
+      const displayWidth = img.naturalWidth * coverScale;
+      const displayHeight = img.naturalHeight * coverScale;
+      const faceCenterX =
+        (stageWidth - displayWidth) / 2 +
+        (face.originX + face.width / 2) * coverScale;
+      const faceCenterY =
+        (stageHeight - displayHeight) / 2 +
+        (face.originY + face.height / 2) * coverScale;
+      const targetFaceHeight = stageHeight * 0.3;
+      const idealZoom = Math.max(
+        70,
+        Math.min(
+          300,
+          Math.round((targetFaceHeight / (face.height * coverScale)) * 100),
+        ),
+      );
+      const scale = idealZoom / 100;
+      setX(
+        Math.round(
+          stageWidth / 2 -
+            (stageWidth / 2 + (faceCenterX - stageWidth / 2) * scale),
+        ),
+      );
+      setY(
+        Math.round(
+          stageHeight * 0.35 -
+            (stageHeight / 2 + (faceCenterY - stageHeight / 2) * scale),
+        ),
+      );
       setZoom(idealZoom);
       setHead(76);
       setNeck(0);
       setHair(0);
       setSkin(3);
-      setProcessMessage("จัดใบหน้าเข้ากรอบเรียบร้อย");
+      setProcessMessage(
+        outfitPreview
+          ? "จัดตัวอย่างชุดในตำแหน่งพร้อมใช้แล้ว กดเปลี่ยนชุดเพื่อยืนยัน"
+          : "จัดใบหน้าเข้ากรอบเรียบร้อย",
+      );
     } catch (e) {
       setProcessMessage(
         e instanceof Error ? e.message : "วิเคราะห์ใบหน้าไม่สำเร็จ",
@@ -512,7 +547,7 @@ export default function Home() {
       setAiProcessing(false);
     }
   }
-  function selectOutfit(outfitId: string) {
+  async function selectOutfit(outfitId: string) {
     if (aiProcessing) return;
     if (!hasUploaded) {
       setProcessMessage("กรุณาอัปโหลดรูปก่อนเลือกชุด");
@@ -527,6 +562,7 @@ export default function Home() {
     setAiComposited(false);
     setCutout(null);
     setProcessMessage("ตรวจสอบชุดตัวอย่าง แล้วกด “เปลี่ยนชุดด้วย AI”");
+    await auto(baseOriginal, true);
   }
   async function confirmOutfit() {
     if (aiProcessing) return;
@@ -886,7 +922,7 @@ export default function Home() {
                   <ZoomOut />
                 </button>
                 <b>{zoom}%</b>
-                <button onClick={() => setZoom(Math.min(130, zoom + 5))}>
+                <button onClick={() => setZoom(Math.min(300, zoom + 5))}>
                   <ZoomIn />
                 </button>
               </div>
@@ -906,7 +942,7 @@ export default function Home() {
                 รีเซ็ตทั้งหมด
               </button>
             </div>
-            <button className="auto-button" onClick={auto}>
+            <button className="auto-button" onClick={() => void auto()}>
               <WandSparkles />
               <span>
                 <b>จัดตำแหน่งอัตโนมัติ</b>
@@ -1127,7 +1163,7 @@ export default function Home() {
               {outfits.map((o) => (
                 <button
                   key={o.id}
-                  onClick={() => selectOutfit(o.id)}
+                  onClick={() => void selectOutfit(o.id)}
                   disabled={aiProcessing}
                   className={`outfit ${selected === o.id ? "selected" : ""} ${o.tone}`}
                 >
