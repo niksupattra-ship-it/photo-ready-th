@@ -112,6 +112,7 @@ function Control({
 
 export default function Home() {
   const inputRef = useRef<HTMLInputElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const dragStart = useRef<{
     px: number;
     py: number;
@@ -469,16 +470,20 @@ export default function Home() {
     ctx.fillRect(0, 0, 900, 1200);
     const scale =
       (aiComposited
-        ? Math.min(900 / person.width, 1200 / person.height)
-        : Math.max(900 / person.width, 1200 / person.height)) *
+        ? Math.max(900 / person.width, 1200 / person.height)
+        : Math.min(900 / person.width, 1200 / person.height)) *
       (zoom / 100);
     const pw = person.width * scale,
       ph = person.height * scale;
+    const previewWidth = stageRef.current?.clientWidth || 450;
+    const previewHeight = stageRef.current?.clientHeight || 600;
+    const exportX = x * (900 / previewWidth);
+    const exportY = y * (1200 / previewHeight);
     ctx.filter = `brightness(${100 + skin}%)`;
     ctx.drawImage(
       person,
-      (900 - pw) / 2 + x * 2,
-      (1200 - ph) / 2 + y * 2,
+      (900 - pw) / 2 + exportX,
+      (1200 - ph) / 2 + exportY,
       pw,
       ph,
     );
@@ -625,6 +630,7 @@ export default function Home() {
           </aside>
           <section className="preview-panel card">
             <div
+              ref={stageRef}
               className="photo-stage"
               style={{ background: bg }}
               onPointerDown={(e) => {
