@@ -3,8 +3,8 @@ services:
     name: photo-ready-th
     runtime: node
     plan: free
-    buildCommand: npm install && npm run build
-    startCommand: npm start
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build
+    startCommand: pnpm start
     healthCheckPath: /
     envVars:
       - key: NODE_VERSION
