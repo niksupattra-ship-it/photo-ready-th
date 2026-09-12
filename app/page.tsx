@@ -40,41 +40,6 @@ const outfits = [
     tone: "suit",
   },
   {
-    id: "job-suit-women-real",
-    label: "สูทหญิงสมจริง",
-    sub: "สมัครงาน · เชิ้ตขาว",
-    image: "/templates/job-suit-women-real.png",
-    tone: "suit",
-  },
-  {
-    id: "job-suit-men-real",
-    label: "สูทชายสมจริง",
-    sub: "สมัครงาน · เชิ้ตขาว",
-    image: "/templates/job-suit-men-real.png",
-    tone: "suit",
-  },
-  {
-    id: "job-white-shirt-women",
-    label: "เชิ้ตขาวหญิง",
-    sub: "สมัครงาน",
-    image: "/templates/job-white-shirt-women.png",
-    tone: "suit",
-  },
-  {
-    id: "job-white-shirt-men",
-    label: "เชิ้ตขาวชาย",
-    sub: "สมัครงาน",
-    image: "/templates/job-white-shirt-men.png",
-    tone: "suit",
-  },
-  {
-    id: "job-navy-suit-tie-men",
-    label: "สูทกรมชาย",
-    sub: "สมัครงาน · ผูกไท",
-    image: "/templates/job-navy-suit-tie-men.png",
-    tone: "suit",
-  },
-  {
     id: "job-suit-open-01",
     label: "สูทสมัครงาน 1",
     sub: "ไม่ผูกไท",
@@ -581,7 +546,12 @@ export default function Home() {
       ],
       successMessage: "เปลี่ยนชุดด้วย AI สำเร็จแล้ว เลือกทรงผมต่อได้เลย",
     });
-    if (result) setOutfitBaseImage(result);
+    if (result) {
+      setOutfitBaseImage(result);
+      setX(0);
+      setY(0);
+      setZoom(100);
+    }
   }
   async function selectHairstyle(hairstyleId: string) {
     if (aiProcessing) return;
