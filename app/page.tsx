@@ -610,43 +610,13 @@ export default function Home() {
       successMessage: "เปลี่ยนทรงผมและปรับดำ Pro 50% สำเร็จแล้ว",
     });
   }
-  async function changeBackground(color: string) {
-    if (!aiComposited || !aiBaseImage) {
-      setBg(color);
-      return;
-    }
-    if (backgroundProcessing || color === bg) return;
-    setBackgroundProcessing(true);
-    setProcessMessage("AI กำลังเปลี่ยนเฉพาะพื้นหลังและเก็บขอบภาพ…");
-    try {
-      const source = await fetch(aiBaseImage);
-      const blob = await source.blob();
-      const form = new FormData();
-      form.append("image", blob, "v3-portrait.png");
-      form.append("background", color);
-      const response = await fetch("/api/change-background", {
-        method: "POST",
-        body: form,
-      });
-      const data = (await response.json()) as {
-        image?: string;
-        error?: string;
-      };
-      if (!response.ok || !data.image)
-        throw new Error(data.error || "AI เปลี่ยนพื้นหลังไม่สำเร็จ");
-      setOriginal(data.image);
-      setCutout(null);
-      setBg(color);
-      setProcessMessage("AI เปลี่ยนพื้นหลังและเก็บขอบเรียบร้อยแล้ว");
-    } catch (e) {
-      setProcessMessage(
-        e instanceof Error
-          ? e.message
-          : "AI เปลี่ยนพื้นหลังไม่สำเร็จ กรุณาลองอีกครั้ง",
-      );
-    } finally {
-      setBackgroundProcessing(false);
-    }
+  function changeBackground(color: string) {
+    setBg(color);
+    setProcessMessage(
+      aiComposited
+        ? "เปลี่ยนสีพื้นหลังแล้ว โดยไม่ใช้ AI"
+        : "เลือกสีพื้นหลังสำหรับภาพแล้ว",
+    );
   }
   async function removeBackground() {
     setProcessing(true);
