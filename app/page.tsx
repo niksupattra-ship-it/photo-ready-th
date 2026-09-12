@@ -819,7 +819,7 @@ export default function Home() {
                       aria-label="ระดับการปรับแสงและผิว"
                       type="range"
                       min="0"
-                      max="35"
+                      max="100"
                       step="5"
                       value={skinStrength}
                       onChange={(e) => setSkinStrength(Number(e.target.value))}
