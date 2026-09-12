@@ -108,7 +108,7 @@ export default function Home() {
     const canvas=document.createElement("canvas");canvas.width=900;canvas.height=1200;
     const ctx=canvas.getContext("2d");if(!ctx)return;
     ctx.fillStyle=bg;ctx.fillRect(0,0,900,1200);
-    const scale=Math.max(900/person.width,1200/person.height)*(zoom/100);
+    const scale=(aiComposited?Math.min(900/person.width,1200/person.height):Math.max(900/person.width,1200/person.height))*(zoom/100);
     const pw=person.width*scale,ph=person.height*scale;
     ctx.filter=`brightness(${100+skin}%)`;
     ctx.drawImage(person,(900-pw)/2+x*2,(1200-ph)/2+y*2,pw,ph);ctx.filter="none";

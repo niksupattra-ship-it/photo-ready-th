@@ -1,0 +1,29 @@
+/* Portrait preview and exported composition use a standard 3:4 ID-photo frame. */
+.preview-panel {
+  height: auto !important;
+  min-height: 570px;
+}
+
+.photo-stage {
+  flex: none !important;
+  width: min(100%, 450px) !important;
+  height: auto !important;
+  min-height: 0 !important;
+  aspect-ratio: 3 / 4;
+  margin: 0 auto;
+  background: var(--blue);
+}
+
+.photo-stage > .person-layer {
+  object-fit: contain !important;
+}
+
+@media (max-width: 900px) {
+  .preview-panel {
+    min-height: 0;
+  }
+
+  .photo-stage {
+    width: min(100%, 390px) !important;
+  }
+}
