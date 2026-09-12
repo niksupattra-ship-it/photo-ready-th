@@ -1139,7 +1139,6 @@ export default function Home() {
                 >
                   <img src={o.image} alt={o.label} />
                   <b>{o.label}</b>
-                  <small>({o.sub})</small>
                 </button>
               ))}
               <button className="all-outfits">
@@ -1160,40 +1159,14 @@ export default function Home() {
               ) : (
                 <WandSparkles />
               )}
-              <span>
-                <b>
-                  {aiProcessing
-                    ? "กำลังเปลี่ยนชุด…"
-                    : outfitBaseImage
-                      ? "เปลี่ยนชุดแล้ว"
-                      : "เปลี่ยนชุดด้วย AI"}
-                </b>
-                <small>
-                  {outfitBaseImage
-                    ? "เลือกทรงผมต่อได้เลย"
-                    : `ใช้ชุด ${outfit.label}`}
-                </small>
-              </span>
+              <b>
+                {aiProcessing
+                  ? "กำลังเปลี่ยนชุด…"
+                  : outfitBaseImage
+                    ? "เปลี่ยนชุดแล้ว"
+                    : "เปลี่ยนชุดด้วย AI"}
+              </b>
             </button>
-            <div className="ready-card">
-              <h3>▣ รูปพร้อมใช้ มาตรฐานราชการ</h3>
-              <p>
-                <Check />
-                ขนาดและสัดส่วนถูกต้องตามระเบียบ
-              </p>
-              <p>
-                <Check />
-                พื้นหลังสีมาตรฐาน
-              </p>
-              <p>
-                <Check />
-                แต่งกายถูกต้องตามประเภท
-              </p>
-              <p>
-                <Check />
-                ใช้ได้ทั้งสมัครงานและราชการ
-              </p>
-            </div>
           </div>
         </section>
       </section>
