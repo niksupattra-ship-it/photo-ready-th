@@ -369,56 +369,25 @@ export default function Home() {
   }
   async function removeBackground(sourceImage = original) {
     setProcessing(true);
-    setProcessMessage("กำลังเตรียมระบบตัดพื้นหลัง…");
+    setProcessMessage("กำลังแยกพื้นหลังและจัดสัดส่วนภาพ…");
     try {
-      const [{ FilesetResolver, ImageSegmenter }, img] = await Promise.all([
-        import("@mediapipe/tasks-vision"),
-        new Promise<HTMLImageElement>((resolve, reject) => {
-          const el = new Image();
-          el.onload = () => resolve(el);
-          el.onerror = reject;
-          el.src = sourceImage;
-        }),
-      ]);
-      const vision = await FilesetResolver.forVisionTasks(
-        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm",
-      );
-      setProcessMessage("กำลังแยกบุคคลและเก็บขอบเส้นผม…");
-      const segmenter = await ImageSegmenter.createFromOptions(vision, {
-        baseOptions: {
-          modelAssetPath:
-            "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite",
-        },
-        runningMode: "IMAGE",
-        outputConfidenceMasks: true,
-        outputCategoryMask: false,
+      const source = await fetch(sourceImage);
+      const form = new FormData();
+      form.append("image", await source.blob(), "portrait.png");
+      const response = await fetch("/api/remove-background", {
+        method: "POST",
+        body: form,
       });
-      const result = segmenter.segment(img),
-        mask = result.confidenceMasks?.[0];
-      if (!mask) throw new Error("ไม่พบตัวบุคคล");
-      const canvas = document.createElement("canvas");
-      canvas.width = mask.width;
-      canvas.height = mask.height;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) throw new Error("เปิดพื้นที่ประมวลผลไม่ได้");
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height),
-        values = mask.getAsFloat32Array();
-      for (let i = 0; i < values.length; i++) {
-        const a = Math.max(0, Math.min(1, (values[i] - 0.08) / 0.86));
-        pixels.data[i * 4 + 3] = Math.round(a * 255);
-      }
-      ctx.putImageData(pixels, 0, 0);
-      mask.close();
-      segmenter.close();
-      const blob = await new Promise<Blob | null>((resolve) =>
-        canvas.toBlob(resolve, "image/png"),
-      );
-      if (!blob) throw new Error("สร้างภาพโปร่งใสไม่ได้");
-      const cutoutUrl = URL.createObjectURL(blob);
-      setCutout(cutoutUrl);
-      setProcessMessage("ตัดพื้นหลังเรียบร้อย");
-      return cutoutUrl;
+      const data = (await response.json()) as {
+        image?: string;
+        error?: string;
+      };
+      if (!response.ok || !data.image)
+        throw new Error(data.error || "แยกพื้นหลังไม่สำเร็จ");
+      setOriginal(data.image);
+      setCutout(data.image);
+      setProcessMessage("แยกพื้นหลังและจัดสัดส่วนเรียบร้อยแล้ว");
+      return data.image;
     } catch (e) {
       setProcessMessage(
         e instanceof Error
@@ -483,7 +452,7 @@ export default function Home() {
           <div>
             <div className="brand-title">
               <strong>รูปพร้อมใช้</strong>
-              <span className="version-badge">V3.3</span>
+              <span className="version-badge">V3.4</span>
             </div>
             <small>รูปสวย ถูกต้อง พร้อมใช้ทุกโอกาส</small>
           </div>
