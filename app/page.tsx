@@ -463,7 +463,10 @@ export default function Home() {
             <Camera />
           </div>
           <div>
-            <strong>รูปพร้อมใช้</strong>
+            <div className="brand-title">
+              <strong>รูปพร้อมใช้</strong>
+              <span className="version-badge">V3.1</span>
+            </div>
             <small>รูปสวย ถูกต้อง พร้อมใช้ทุกโอกาส</small>
           </div>
         </div>
