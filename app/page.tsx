@@ -66,8 +66,8 @@ const aiOptions = [
   },
   {
     id: "skin-light",
-    label: "ปรับแสงและสีผิว",
-    detail: "ผิวกลมกลืนทั้งหน้าและคอ",
+    label: "ปรับแสงให้สมดุล",
+    detail: "คงผิวและใบหน้าเดิมทั้งหมด",
   },
   {
     id: "hair-edge",
