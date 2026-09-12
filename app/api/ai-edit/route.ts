@@ -11,8 +11,6 @@ const LABELS: Record<string, string> = {
     "Adjust hair volume as requested, symmetrically and naturally without changing the hairline or face.",
   hairstyle:
     "Change only the hairstyle to match the supplied hairstyle reference.",
-  "skin-light":
-    "Correct only whole-photo exposure and white balance while retaining the original complexion and every real skin detail.",
   "hair-edge":
     "Refine the outer hair edges with realistic fine strands and clean professional-photo separation; avoid hard or cut-out edges.",
 };
@@ -50,11 +48,6 @@ export async function POST(request: Request) {
     const outfit = input.get("outfit");
     const outfitChange = operations.includes("outfit") && outfit instanceof File;
     const outfitLabel = String(input.get("outfitLabel") || "ชุดที่เลือก");
-    const skinStyle = String(input.get("skinStyle") || "ธรรมชาติ");
-    const skinStrength = Math.max(
-      0,
-      Math.min(100, Number(input.get("skinStrength") || 15)),
-    );
     const hairstyleRef = input.get("hairstyleRef");
     const hairstyleOnly =
       operations.length === 1 &&
@@ -63,14 +56,11 @@ export async function POST(request: Request) {
     const volumeInstruction = operations.includes("hair-volume")
       ? ` Hair volume direction: ${hairVolume === "ลด" ? "slightly reduce excessive volume" : hairVolume === "เพิ่ม" ? "slightly increase thin areas" : "keep the current overall volume"}.`
       : "";
-    const skinInstruction = operations.includes("skin-light")
-      ? ` Apply a ${skinStrength}% ${skinStyle} whole-photo RAW-style exposure and white-balance correction. ${skinStrength === 0 ? "Make no lighting change." : skinStyle === "สดใส" ? "Create a clean brighter exposure without whitening the skin." : skinStyle === "สตูดิโอ" ? "Create balanced neutral studio illumination while retaining natural facial depth." : "Create neutral true-to-life exposure and accurate white balance."} Preserve pores, blemishes, fine lines, under-eye detail, natural asymmetry, highlights, shadows, and original complexion. Never smooth, blur, airbrush, denoise, repaint, whiten, beautify, add makeup, or regenerate the face or skin.`
-      : "";
     const prompt = hairstyleOnly
-      ? `Edit image 1 in place, using image 2 only as the hairstyle reference. Change only the hair to match the reference's parting, outline, length, direction, and arrangement. Preserve the exact original face, identity, expression, skin, ears, eyebrows, eyes, nose, lips, jaw, neck, shoulders, clothing, background, lighting, canvas dimensions, crop, camera perspective, person scale, head size, and every non-hair pixel. Do not crop, zoom, move, reshape, beautify, or regenerate the person. Adapt the hairstyle naturally to the existing head with realistic individual strands, roots, density, gravity, and soft camera highlights; never plastic, painted, pasted, helmet-like, or wig-like. The result must look like the same genuine photograph with only the hairstyle changed.`
+      ? `Edit image 1 in place, using image 2 only as the hairstyle reference. Change only hair pixels to match the reference's parting, outline, length, direction, and arrangement. ABSOLUTE LOCK: preserve the exact original face, identity, expression, every skin pixel and texture, complexion, exposure, highlights, shadows, color temperature, white balance, illumination, ears, eyebrows, eyes, nose, lips, jaw, neck, shoulders, clothing, background, canvas dimensions, crop, camera perspective, person scale, and head size. Never retouch, smooth, brighten, whiten, recolor, relight, denoise, add makeup, crop, zoom, move, reshape, beautify, or regenerate the person. Adapt the hairstyle naturally to the existing head with realistic individual strands, roots, density, gravity, and soft camera highlights; never plastic, painted, pasted, helmet-like, or wig-like. The result must be the same genuine photograph with only the hairstyle changed.`
       : outfitChange
-        ? `Create one finished formal front-facing ID portrait. Image 1 is the absolute source of truth for the person. Image 2 is clothing reference only: dress the person in ${outfitLabel}, matching its collar, lapels, fabric, construction, silhouette, and proportions. ${chosen.join(" ")}${volumeInstruction}${skinInstruction} Preserve the entire face, identity, expression, skin texture, hair, head size, neck, and natural adult body proportions from image 1. Keep the head, neck, shoulders, outfit, and torso at one uniform photographic scale. Never make the head oversized or the body narrow or miniature. Preserve the canvas, crop, camera perspective, and background. Do not smooth, beautify, repaint, whiten, or regenerate the face. The outfit must show realistic woven fabric, seams, folds, depth, and non-uniform camera highlights—never plastic, illustrated, or synthetic. The result must look like the same real person genuinely photographed wearing the selected outfit.`
-        : `Edit this formal front-facing ID portrait with restrained professional retouching. ${chosen.join(" ")}${volumeInstruction}${skinInstruction} CRITICAL: preserve the person's identity exactly—same facial structure, eyes, eyebrows, nose, lips, expression, age, complexion, pores, blemishes, and recognizable features. Do not beautify, smooth, reshape, replace, or regenerate the face. Keep camera angle, crop, clothing, and background unchanged. Make only the requested corrections. The result must look like a genuine studio photograph, not AI-generated.`;
+        ? `Create one finished formal front-facing ID portrait. Image 1 is the absolute source of truth for the person. Image 2 is clothing reference only: dress the person in ${outfitLabel}, matching its collar, lapels, fabric, construction, silhouette, and proportions. ${chosen.join(" ")}${volumeInstruction} ABSOLUTE FACE, SKIN, AND LIGHTING LOCK: preserve the entire face and every visible skin area from image 1, including identity, expression, pores, blemishes, fine lines, complexion, exposure, highlights, shadows, color temperature, white balance, and illumination. Never retouch, smooth, blur, airbrush, brighten, whiten, recolor, relight, denoise, add makeup, beautify, repaint, or regenerate face or skin. Preserve the hair and head size. Change only the clothing and the minimum necessary collar/neck boundary. Keep the head, neck, shoulders, outfit, and torso at one uniform natural adult photographic scale. Never make the head oversized or the body narrow or miniature. Preserve the canvas, crop, camera perspective, and background. The outfit must show realistic woven fabric, seams, folds, depth, and non-uniform camera highlights—never plastic, illustrated, or synthetic. The result must look like the same real person genuinely photographed wearing the selected outfit.`
+        : `Edit this formal front-facing ID portrait only as explicitly requested. ${chosen.join(" ")}${volumeInstruction} ABSOLUTE FACE, SKIN, AND LIGHTING LOCK: preserve identity, facial structure, expression, age, every skin pixel and texture, complexion, exposure, highlights, shadows, color temperature, white balance, and illumination exactly. Never retouch, smooth, blur, airbrush, brighten, whiten, recolor, relight, denoise, add makeup, beautify, reshape, replace, or regenerate face or skin. Keep camera angle, crop, clothing, background, and all unrelated pixels unchanged. The result must look like the same genuine photograph, not AI-generated.`;
     const body = new FormData();
     body.append("model", "gpt-image-1.5");
     body.append("image[]", image, image.name || "portrait.png");
