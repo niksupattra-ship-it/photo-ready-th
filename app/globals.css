@@ -842,6 +842,16 @@ body {
   border-radius: 11px;
   background: linear-gradient(180deg, #f4f9ff, #fff);
 }
+
+/* Keep every AI option active in the processing pipeline, but present only
+   the hairstyle picker in the editor. */
+.ai-editor > .ai-editor-title,
+.ai-editor > .ai-option-grid,
+.ai-editor > .hair-volume,
+.ai-editor > .skin-style-control,
+.ai-editor > .run-ai {
+  display: none;
+}
 .ai-editor-title {
   display: grid;
   gap: 2px;
