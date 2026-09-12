@@ -1,6 +1,7 @@
 export const runtime = "nodejs";
 
 const LABELS:Record<string,string>={
+  outfit:"Change the clothing to match image 2 exactly while preserving the person.",
   neck:"Make the visible neck anatomically correct for this adult: centered under the jaw, naturally proportioned in width and length, and connected continuously to both the unchanged head and the shoulders. Never make the neck too thin, too long, detached, or mismatched in scale.",
   shoulders:"Level the left and right shoulders naturally while keeping realistic posture and body proportions.",
   flyaways:"Remove only distracting flyaway and stray hairs while preserving the hairstyle.",

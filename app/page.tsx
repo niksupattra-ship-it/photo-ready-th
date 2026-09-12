@@ -40,6 +40,27 @@ const outfits = [
     tone: "suit",
   },
   {
+    id: "job-suit-open-01",
+    label: "สูทสมัครงาน 1",
+    sub: "ไม่ผูกไท",
+    image: "/templates/job-suit-open-01.png",
+    tone: "suit",
+  },
+  {
+    id: "job-suit-tie",
+    label: "สูทสมัครงาน",
+    sub: "ผูกไท",
+    image: "/templates/job-suit-tie.png",
+    tone: "suit",
+  },
+  {
+    id: "job-suit-open-02",
+    label: "สูทสมัครงาน 2",
+    sub: "ไม่ผูกไท",
+    image: "/templates/job-suit-open-02.png",
+    tone: "suit",
+  },
+  {
     id: "women-student",
     label: "นักศึกษาหญิง",
     sub: "มหาวิทยาลัย",
@@ -137,7 +158,9 @@ export default function Home() {
   } | null>(null);
   const [original, setOriginal] = useState("/demo/original.png");
   const [baseOriginal, setBaseOriginal] = useState("/demo/original.png");
+  const [hasUploaded, setHasUploaded] = useState(false);
   const [aiBaseImage, setAiBaseImage] = useState<string | null>(null);
+  const [outfitBaseImage, setOutfitBaseImage] = useState<string | null>(null);
   const [aiComposited, setAiComposited] = useState(false);
   const [cutout, setCutout] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
@@ -231,7 +254,9 @@ export default function Home() {
       const url = URL.createObjectURL(f);
       setBaseOriginal(url);
       setOriginal(url);
+      setHasUploaded(true);
       setAiBaseImage(null);
+      setOutfitBaseImage(null);
       setAiComposited(false);
       setCutout(null);
       setProcessMessage("");
@@ -362,8 +387,20 @@ export default function Home() {
     if (!blob) throw new Error("สร้างภาพโปร่งใสไม่ได้");
     return URL.createObjectURL(blob);
   }
-  async function aiEdit() {
-    if (!aiSelected.length) {
+  async function aiEdit(options?: {
+    outfitId?: string;
+    hairstyleId?: string;
+    operations?: string[];
+    source?: string;
+    successMessage?: string;
+  }) {
+    const operations = options?.operations ?? aiSelected;
+    const targetOutfit =
+      outfits.find((item) => item.id === options?.outfitId) ?? outfit;
+    const targetHairstyle =
+      hairstyleOptions.find((item) => item.id === options?.hairstyleId) ??
+      hairstyleOptions.find((item) => item.id === hairstyle);
+    if (!operations.length) {
       setProcessMessage("กรุณาเลือกอย่างน้อย 1 รายการ");
       return;
     }
@@ -371,8 +408,8 @@ export default function Home() {
     setProcessMessage("AI กำลังปรับภาพจริง อาจใช้เวลาประมาณ 30–90 วินาที…");
     try {
       const [source, outfitSource] = await Promise.all([
-        fetch(baseOriginal),
-        fetch(outfit.image),
+        fetch(options?.source ?? baseOriginal),
+        fetch(targetOutfit.image),
       ]);
       const [blob, outfitBlob] = await Promise.all([
         source.blob(),
@@ -381,20 +418,24 @@ export default function Home() {
       const form = new FormData();
       form.append("image", blob, "portrait.png");
       form.append("outfit", outfitBlob, "outfit-reference.png");
-      form.append("outfitLabel", `${outfit.label} (${outfit.sub})`);
+      form.append(
+        "outfitLabel",
+        `${targetOutfit.label} (${targetOutfit.sub})`,
+      );
       form.append("background", bg);
-      form.append("operations", JSON.stringify(aiSelected));
+      form.append("operations", JSON.stringify(operations));
       form.append("hairVolume", hairVolume);
       form.append("skinStyle", skinStyle);
       form.append("skinStrength", String(skinStrength));
-      const selectedHairstyle = hairstyleOptions.find(
-        (option) => option.id === hairstyle,
-      );
-      form.append("hairstyle", selectedHairstyle?.label || "ทรงเดิม");
-      if (selectedHairstyle?.image) {
-        const hairstyleSource = await fetch(selectedHairstyle.image);
+      form.append("hairstyle", targetHairstyle?.label || "ทรงเดิม");
+      if (targetHairstyle?.image) {
+        const hairstyleSource = await fetch(targetHairstyle.image);
         const hairstyleBlob = await hairstyleSource.blob();
-        form.append("hairstyleRef", hairstyleBlob, `${hairstyle}.png`);
+        form.append(
+          "hairstyleRef",
+          hairstyleBlob,
+          `${targetHairstyle.id}.png`,
+        );
       }
       const response = await fetch("/api/ai-edit", {
         method: "POST",
@@ -411,14 +452,62 @@ export default function Home() {
       setAiComposited(true);
       setCutout(null);
       setBefore(false);
-      setProcessMessage("AI ปรับภาพแบบ V3 สำเร็จแล้ว");
+      setProcessMessage(
+        options?.successMessage || "AI ปรับภาพแบบ V3 สำเร็จแล้ว",
+      );
+      return data.image;
     } catch (e) {
       setProcessMessage(
         e instanceof Error ? e.message : "AI ปรับภาพไม่สำเร็จ กรุณาลองอีกครั้ง",
       );
+      return null;
     } finally {
       setAiProcessing(false);
     }
+  }
+  async function selectOutfit(outfitId: string) {
+    if (aiProcessing) return;
+    if (!hasUploaded) {
+      setProcessMessage("กรุณาอัปโหลดรูปก่อนเลือกชุด");
+      inputRef.current?.click();
+      return;
+    }
+    setSelected(outfitId);
+    setHairstyle("original");
+    const result = await aiEdit({
+      outfitId,
+      hairstyleId: "original",
+      source: baseOriginal,
+      operations: [
+        "outfit",
+        ...aiSelected.filter((id) => id !== "hairstyle"),
+      ],
+      successMessage: "เปลี่ยนชุดด้วย AI สำเร็จแล้ว เลือกทรงผมต่อได้เลย",
+    });
+    if (result) setOutfitBaseImage(result);
+  }
+  async function selectHairstyle(hairstyleId: string) {
+    if (aiProcessing) return;
+    setHairstyle(hairstyleId);
+    if (hairstyleId === "original") {
+      if (outfitBaseImage) {
+        setOriginal(outfitBaseImage);
+        setAiBaseImage(outfitBaseImage);
+      }
+      setProcessMessage("เลือกทรงผมเดิมแล้ว");
+      return;
+    }
+    if (!hasUploaded) {
+      setProcessMessage("กรุณาอัปโหลดรูปก่อนเลือกทรงผม");
+      inputRef.current?.click();
+      return;
+    }
+    await aiEdit({
+      hairstyleId,
+      source: outfitBaseImage ?? original,
+      operations: ["hairstyle"],
+      successMessage: "เปลี่ยนทรงผมและปรับดำ Pro 50% สำเร็จแล้ว",
+    });
   }
   async function changeBackground(color: string) {
     if (!aiComposited || !aiBaseImage) {
@@ -821,7 +910,7 @@ export default function Home() {
                   <div className="hairstyle-heading">
                     <b>เลือกทรงผม</b>
                     <small>
-                      AI จะรักษาใบหน้าและแนวไรผมเดิม พร้อมปรับสีผมดำ Pro 50%
+                      เลือกแล้ว AI จะปรับทันที พร้อมสีผมดำ Pro 50%
                     </small>
                   </div>
                   <div className="hairstyle-options">
@@ -830,7 +919,8 @@ export default function Home() {
                         type="button"
                         key={style.id}
                         className={hairstyle === style.id ? "active" : ""}
-                        onClick={() => setHairstyle(style.id)}
+                        onClick={() => void selectHairstyle(style.id)}
+                        disabled={aiProcessing}
                       >
                         {style.image ? (
                           <img src={style.image} alt={style.label} />
@@ -885,7 +975,7 @@ export default function Home() {
               )}
               <button
                 className="run-ai"
-                onClick={aiEdit}
+                onClick={() => void aiEdit()}
                 disabled={aiProcessing}
               >
                 {aiProcessing ? (
@@ -980,7 +1070,8 @@ export default function Home() {
               {outfits.map((o) => (
                 <button
                   key={o.id}
-                  onClick={() => setSelected(o.id)}
+                  onClick={() => void selectOutfit(o.id)}
+                  disabled={aiProcessing}
                   className={`outfit ${selected === o.id ? "selected" : ""} ${o.tone}`}
                 >
                   <img src={o.image} alt={o.label} />
