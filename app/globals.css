@@ -1023,6 +1023,13 @@ body {
   flex: 1;
   accent-color: #176fe2;
 }
+.skin-apply-hint {
+  display: block;
+  margin-top: 5px;
+  color: #627892;
+  font-size: 8px;
+  text-align: center;
+}
 .run-ai {
   width: 100%;
   height: 42px;

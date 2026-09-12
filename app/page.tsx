@@ -819,6 +819,9 @@ export default function Home() {
                       onChange={(e) => setSkinStrength(Number(e.target.value))}
                     />
                   </label>
+                  <small className="skin-apply-hint">
+                    ตั้งค่าแล้วกด “ปรับด้วย AI” ด้านล่างเพื่อใช้กับภาพ
+                  </small>
                 </div>
               )}
               <button
