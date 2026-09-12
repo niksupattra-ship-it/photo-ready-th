@@ -820,7 +820,9 @@ export default function Home() {
                 <div className="hairstyle-control">
                   <div className="hairstyle-heading">
                     <b>เลือกทรงผม</b>
-                    <small>AI จะรักษาใบหน้าและแนวไรผมเดิม</small>
+                    <small>
+                      AI จะรักษาใบหน้าและแนวไรผมเดิม พร้อมปรับสีผมดำ Pro 50%
+                    </small>
                   </div>
                   <div className="hairstyle-options">
                     {hairstyleOptions.map((style) => (
