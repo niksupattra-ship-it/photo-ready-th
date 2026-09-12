@@ -108,7 +108,9 @@ const hairstyleOptions = [
     return {
       id: `hair-${number}`,
       label: `แบบ ${number}`,
-      image: `/hairstyles/hair-${number}.png`,
+      // Use the exact model preview as the AI reference too. This keeps the
+      // hairstyle users see in the picker identical to the style AI receives.
+      image: `/hairstyle-previews/hair-${number}.png`,
       preview: `/hairstyle-previews/hair-${number}.png`,
     };
   }),
