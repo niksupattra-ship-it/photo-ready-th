@@ -66,11 +66,6 @@ const aiOptions = [
   },
   { id: "hairstyle", label: "เปลี่ยนทรงผม", detail: "เลือกทรงผมสุภาพ 29 แบบ" },
   {
-    id: "skin-light",
-    label: "ปรับแสงให้สมดุล",
-    detail: "คงผิวและใบหน้าเดิมทั้งหมด",
-  },
-  {
     id: "hair-edge",
     label: "ทำขอบผมให้เนียน",
     detail: "เก็บขอบละเอียด ไม่แข็ง",
@@ -147,6 +142,7 @@ export default function Home() {
   const [skinStrength, setSkinStrength] = useState(15);
   const [hairstyle, setHairstyle] = useState("original");
   const hairstyleBase = useRef<string | null>(null);
+  const outfitCutout = useRef<string | null>(null);
   const uploadBase = useRef("/demo/original.png");
   const outfitBase = useRef<string | null>(null);
   const [aiComposited, setAiComposited] = useState(false);
@@ -227,6 +223,7 @@ export default function Home() {
       setOriginal(src);
       uploadBase.current = src;
       outfitBase.current = null;
+      outfitCutout.current = null;
       setAiComposited(false);
       setCutout(null);
       setHairstyle("original");
@@ -280,9 +277,14 @@ export default function Home() {
       setX(0);
       setY(0);
       setZoom(100);
-      setCutout(null);
+      if (aiComposited) await removeBackground(data.image);
+      else setCutout(null);
       setBefore(false);
-      setProcessMessage("AI ปรับภาพเรียบร้อยแล้ว กดตัดพื้นหลังเพื่อประกอบชุด");
+      setProcessMessage(
+        aiComposited
+          ? "เปลี่ยนทรงผมและแยกพื้นหลังเรียบร้อยแล้ว"
+          : "ปรับภาพเรียบร้อยแล้ว",
+      );
     } catch (e) {
       setProcessMessage(
         e instanceof Error ? e.message : "AI ปรับภาพไม่สำเร็จ กรุณาลองอีกครั้ง",
@@ -332,8 +334,13 @@ export default function Home() {
       hairstyleBase.current = data.image;
       setHairstyle("original");
       setAiComposited(true);
-      setCutout(null);
-      setProcessMessage("เปลี่ยนชุดเรียบร้อยแล้ว");
+      const separated = await removeBackground(data.image);
+      outfitCutout.current = separated;
+      setProcessMessage(
+        separated
+          ? "เปลี่ยนชุดและแยกพื้นหลังเรียบร้อยแล้ว"
+          : "เปลี่ยนชุดสำเร็จ แต่ยังแยกพื้นหลังไม่สำเร็จ กรุณากดตัดพื้นหลังอีกครั้ง",
+      );
     } catch (e) {
       setProcessMessage(
         e instanceof Error ? e.message : "เปลี่ยนชุดไม่สำเร็จ กรุณาลองอีกครั้ง",
@@ -352,7 +359,7 @@ export default function Home() {
     if (id === "original") {
       if (outfitBase.current) {
         setOriginal(outfitBase.current);
-        setCutout(null);
+        setCutout(outfitCutout.current);
         setProcessMessage("กลับมาใช้ทรงผมเดิมแล้ว");
       }
       return;
@@ -360,7 +367,7 @@ export default function Home() {
     if (!hairstyleBase.current) hairstyleBase.current = original;
     await aiEdit(id);
   }
-  async function removeBackground() {
+  async function removeBackground(sourceImage = original) {
     setProcessing(true);
     setProcessMessage("กำลังเตรียมระบบตัดพื้นหลัง…");
     try {
@@ -370,7 +377,7 @@ export default function Home() {
           const el = new Image();
           el.onload = () => resolve(el);
           el.onerror = reject;
-          el.src = original;
+          el.src = sourceImage;
         }),
       ]);
       const vision = await FilesetResolver.forVisionTasks(
@@ -408,8 +415,10 @@ export default function Home() {
         canvas.toBlob(resolve, "image/png"),
       );
       if (!blob) throw new Error("สร้างภาพโปร่งใสไม่ได้");
-      setCutout(URL.createObjectURL(blob));
+      const cutoutUrl = URL.createObjectURL(blob);
+      setCutout(cutoutUrl);
       setProcessMessage("ตัดพื้นหลังเรียบร้อย");
+      return cutoutUrl;
     } catch (e) {
       setProcessMessage(
         e instanceof Error
@@ -419,6 +428,7 @@ export default function Home() {
     } finally {
       setProcessing(false);
     }
+    return null;
   }
   async function download() {
     const load = (src: string) =>
@@ -473,7 +483,7 @@ export default function Home() {
           <div>
             <div className="brand-title">
               <strong>รูปพร้อมใช้</strong>
-              <span className="version-badge">V3.2</span>
+              <span className="version-badge">V3.3</span>
             </div>
             <small>รูปสวย ถูกต้อง พร้อมใช้ทุกโอกาส</small>
           </div>
@@ -568,7 +578,7 @@ export default function Home() {
             <div className="before-label">ก่อนปรับ (Before)</div>
             <button
               className="remove-bg"
-              onClick={removeBackground}
+              onClick={() => void removeBackground()}
               disabled={processing}
             >
               {processing ? <LoaderCircle className="spin" /> : <Scissors />}
@@ -933,7 +943,9 @@ export default function Home() {
                     setCutout(null);
                     setAiComposited(false);
                     setHairstyle("original");
-                    hairstyleBase.current = outfitBase.current;
+                    outfitBase.current = null;
+                    outfitCutout.current = null;
+                    hairstyleBase.current = null;
                   }}
                   className={`outfit ${selected === o.id ? "selected" : ""} ${o.tone}`}
                 >
