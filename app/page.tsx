@@ -335,13 +335,9 @@ export default function Home() {
       hairstyleBase.current = data.image;
       setHairstyle("original");
       setAiComposited(true);
-      const separated = await removeBackground(data.image);
-      outfitCutout.current = separated;
-      setProcessMessage(
-        separated
-          ? "เปลี่ยนชุดและแยกพื้นหลังเรียบร้อยแล้ว"
-          : "เปลี่ยนชุดสำเร็จ แต่ยังแยกพื้นหลังไม่สำเร็จ กรุณากดตัดพื้นหลังอีกครั้ง",
-      );
+      setCutout(data.image);
+      outfitCutout.current = data.image;
+      setProcessMessage("เปลี่ยนชุดและแยกพื้นหลังเรียบร้อยแล้ว");
     } catch (e) {
       setProcessMessage(
         e instanceof Error ? e.message : "เปลี่ยนชุดไม่สำเร็จ กรุณาลองอีกครั้ง",
