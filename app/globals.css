@@ -601,6 +601,12 @@ body {
   box-shadow: none;
   cursor: not-allowed;
 }
+.adjust-panel > .confirm-outfit {
+  width: 100%;
+  max-width: none;
+  margin-top: 10px;
+  justify-self: stretch;
+}
 .outfit {
   width: 100%;
   min-width: 0;

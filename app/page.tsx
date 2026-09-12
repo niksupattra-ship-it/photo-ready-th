@@ -920,6 +920,27 @@ export default function Home() {
               </span>
               <b>›</b>
             </button>
+            <button
+              type="button"
+              className="confirm-outfit"
+              onClick={() => void confirmOutfit()}
+              disabled={!hasUploaded || aiProcessing || Boolean(outfitBaseImage)}
+            >
+              {aiProcessing ? (
+                <LoaderCircle className="spin" />
+              ) : outfitBaseImage ? (
+                <Check />
+              ) : (
+                <WandSparkles />
+              )}
+              <b>
+                {aiProcessing
+                  ? "กำลังเปลี่ยนชุด…"
+                  : outfitBaseImage
+                    ? "เปลี่ยนชุดสำเร็จ"
+                    : "ยืนยันเปลี่ยนชุด"}
+              </b>
+            </button>
             <section className="ai-editor">
               <div className="ai-editor-title">
                 <b>
@@ -1146,27 +1167,6 @@ export default function Home() {
                 ดูเทมเพลตทั้งหมด<span>›</span>
               </button>
             </div>
-            <button
-              type="button"
-              className="confirm-outfit"
-              onClick={() => void confirmOutfit()}
-              disabled={!hasUploaded || aiProcessing || Boolean(outfitBaseImage)}
-            >
-              {aiProcessing ? (
-                <LoaderCircle className="spin" />
-              ) : outfitBaseImage ? (
-                <Check />
-              ) : (
-                <WandSparkles />
-              )}
-              <b>
-                {aiProcessing
-                  ? "กำลังเปลี่ยนชุด…"
-                  : outfitBaseImage
-                    ? "เปลี่ยนชุดแล้ว"
-                    : "เปลี่ยนชุดด้วย AI"}
-              </b>
-            </button>
           </div>
         </section>
       </section>
