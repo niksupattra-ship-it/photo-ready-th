@@ -305,7 +305,11 @@ body {
 }
 .photo-stage {
   position: relative;
-  flex: 1;
+  flex: 1 1 auto;
+  aspect-ratio: 3 / 4;
+  width: auto;
+  max-width: 100%;
+  align-self: center;
   min-height: 0;
   overflow: hidden;
   border-radius: 7px;
@@ -809,7 +813,7 @@ body {
   position: absolute;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   z-index: 1;
 }
 .photo-stage > .template-layer {

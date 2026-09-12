@@ -277,6 +277,9 @@ export default function Home() {
       if (!response.ok || !data.image)
         throw new Error(data.error || "AI ปรับภาพไม่สำเร็จ");
       setOriginal(data.image);
+      setX(0);
+      setY(0);
+      setZoom(100);
       setCutout(null);
       setBefore(false);
       setProcessMessage("AI ปรับภาพเรียบร้อยแล้ว กดตัดพื้นหลังเพื่อประกอบชุด");
@@ -322,6 +325,9 @@ export default function Home() {
       if (!response.ok || !data.image)
         throw new Error(data.error || "เปลี่ยนชุดไม่สำเร็จ");
       setOriginal(data.image);
+      setX(0);
+      setY(0);
+      setZoom(100);
       outfitBase.current = data.image;
       hairstyleBase.current = data.image;
       setHairstyle("original");
@@ -434,7 +440,7 @@ export default function Home() {
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, 900, 1200);
     const scale =
-      Math.max(900 / person.width, 1200 / person.height) * (zoom / 100);
+      Math.min(900 / person.width, 1200 / person.height) * (zoom / 100);
     const pw = person.width * scale,
       ph = person.height * scale;
     ctx.filter = `brightness(${100 + skin}%)`;
@@ -446,9 +452,11 @@ export default function Home() {
       ph,
     );
     ctx.filter = "none";
-    const cw = 972 * (1 + neck / 100),
-      ch = cloth.height * (cw / cloth.width);
-    ctx.drawImage(cloth, (900 - cw) / 2, 1200 - ch + 330 + hair * 2, cw, ch);
+    if (!aiComposited) {
+      const cw = 972 * (1 + neck / 100),
+        ch = cloth.height * (cw / cloth.width);
+      ctx.drawImage(cloth, (900 - cw) / 2, 1200 - ch + 330 + hair * 2, cw, ch);
+    }
     const a = document.createElement("a");
     a.href = canvas.toDataURL("image/jpeg", 0.94);
     a.download = "รูปพร้อมใช้.jpg";
@@ -465,7 +473,7 @@ export default function Home() {
           <div>
             <div className="brand-title">
               <strong>รูปพร้อมใช้</strong>
-              <span className="version-badge">V3.1</span>
+              <span className="version-badge">V3.2</span>
             </div>
             <small>รูปสวย ถูกต้อง พร้อมใช้ทุกโอกาส</small>
           </div>
