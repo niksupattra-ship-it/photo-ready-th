@@ -102,13 +102,14 @@ const aiOptions = [
   },
 ];
 const hairstyleOptions = [
-  { id: "original", label: "ทรงเดิม", image: null },
+  { id: "original", label: "ทรงเดิม", image: null, preview: null },
   ...Array.from({ length: 29 }, (_, index) => {
     const number = String(index + 1).padStart(2, "0");
     return {
       id: `hair-${number}`,
       label: `แบบ ${number}`,
       image: `/hairstyles/hair-${number}.png`,
+      preview: `/hairstyle-previews/hair-${number}.png`,
     };
   }),
 ];
@@ -907,7 +908,10 @@ export default function Home() {
                         disabled={aiProcessing}
                       >
                         {style.image ? (
-                          <img src={style.image} alt={style.label} />
+                          <img
+                            src={style.preview || style.image}
+                            alt={`ตัวอย่างทรงผม ${style.label}`}
+                          />
                         ) : (
                           <UserRound />
                         )}
