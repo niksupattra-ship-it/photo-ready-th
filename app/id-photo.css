@@ -46,30 +46,6 @@
   color: #dcecff;
 }
 
-.ai-loading-track {
-  position: relative;
-  width: min(72%, 260px);
-  height: 6px;
-  margin-top: 7px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: rgb(255 255 255 / 24%);
-}
-
-.ai-loading-track > span {
-  position: absolute;
-  inset-block: 0;
-  width: 42%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #76baff, #fff, #76baff);
-  animation: ai-loading-slide 1.25s ease-in-out infinite;
-}
-
-@keyframes ai-loading-slide {
-  from { left: -45%; }
-  to { left: 103%; }
-}
-
 @media (max-width: 900px) {
   .preview-panel {
     min-height: 0;
