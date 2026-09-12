@@ -406,7 +406,13 @@ export default function Home() {
       return;
     }
     setAiProcessing(true);
-    setProcessMessage("AI กำลังปรับภาพจริง อาจใช้เวลาประมาณ 30–90 วินาที…");
+    setProcessMessage(
+      operations.length === 1 && operations[0] === "hairstyle"
+        ? "AI กำลังเปลี่ยนทรงผมและปรับสีดำ Pro 50%…"
+        : operations.includes("outfit")
+          ? "AI กำลังเปลี่ยนชุดและปรับภาพให้สมดุล…"
+          : "AI กำลังปรับภาพจริง…",
+    );
     try {
       const [source, outfitSource] = await Promise.all([
         fetch(options?.source ?? baseOriginal),
@@ -778,11 +784,14 @@ export default function Home() {
                   filter: `brightness(${100 + skin}%)`,
                 }}
               />
-              {backgroundProcessing && (
+              {(aiProcessing || backgroundProcessing) && (
                 <div className="background-ai-loading">
                   <LoaderCircle className="spin" />
-                  <b>AI กำลังเปลี่ยนพื้นหลังทั้งภาพ…</b>
+                  <b>{processMessage || "AI กำลังประมวลผลภาพ…"}</b>
                   <small>กรุณารอประมาณ 30–90 วินาที</small>
+                  <span className="ai-loading-track" aria-hidden="true">
+                    <span />
+                  </span>
                 </div>
               )}
               {!aiComposited && (
