@@ -120,10 +120,12 @@ export default function Home() {
   } | null>(null);
   const [original, setOriginal] = useState("/demo/original.png");
   const [baseOriginal, setBaseOriginal] = useState("/demo/original.png");
+  const [aiBaseImage, setAiBaseImage] = useState<string | null>(null);
   const [aiComposited, setAiComposited] = useState(false);
   const [cutout, setCutout] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
   const [aiProcessing, setAiProcessing] = useState(false);
+  const [backgroundProcessing, setBackgroundProcessing] = useState(false);
   const [aiSelected, setAiSelected] = useState<string[]>(
     aiOptions.map((o) => o.id),
   );
@@ -207,6 +209,7 @@ export default function Home() {
       const url = URL.createObjectURL(f);
       setBaseOriginal(url);
       setOriginal(url);
+      setAiBaseImage(null);
       setAiComposited(false);
       setCutout(null);
       setProcessMessage("");
@@ -371,25 +374,51 @@ export default function Home() {
       if (!response.ok || !data.image)
         throw new Error(data.error || "AI ปรับภาพไม่สำเร็จ");
       setOriginal(data.image);
+      setAiBaseImage(data.image);
       setAiComposited(true);
+      setCutout(null);
       setBefore(false);
-      setProcessMessage("AI ปรับภาพแบบ V3 สำเร็จ กำลังแยกพื้นหลัง…");
-      try {
-        const transparent = await makeTransparentCutout(data.image, bg);
-        setCutout(transparent);
-        setProcessMessage("AI ปรับภาพสำเร็จแล้ว เปลี่ยนสีพื้นหลังได้ทันที");
-      } catch {
-        setCutout(null);
-        setProcessMessage(
-          "AI ปรับภาพสำเร็จ แต่แยกพื้นหลังอัตโนมัติไม่สำเร็จ กรุณากดตัดพื้นหลังอีกครั้ง",
-        );
-      }
+      setProcessMessage("AI ปรับภาพแบบ V3 สำเร็จแล้ว");
     } catch (e) {
       setProcessMessage(
         e instanceof Error ? e.message : "AI ปรับภาพไม่สำเร็จ กรุณาลองอีกครั้ง",
       );
     } finally {
       setAiProcessing(false);
+    }
+  }
+  async function changeBackground(color: string) {
+    setBg(color);
+    if (!aiComposited || !aiBaseImage || backgroundProcessing) return;
+    setBackgroundProcessing(true);
+    setProcessMessage("AI กำลังเปลี่ยนเฉพาะพื้นหลังและเก็บขอบภาพ…");
+    try {
+      const source = await fetch(aiBaseImage);
+      const blob = await source.blob();
+      const form = new FormData();
+      form.append("image", blob, "v3-portrait.png");
+      form.append("background", color);
+      const response = await fetch("/api/change-background", {
+        method: "POST",
+        body: form,
+      });
+      const data = (await response.json()) as {
+        image?: string;
+        error?: string;
+      };
+      if (!response.ok || !data.image)
+        throw new Error(data.error || "AI เปลี่ยนพื้นหลังไม่สำเร็จ");
+      setOriginal(data.image);
+      setCutout(null);
+      setProcessMessage("AI เปลี่ยนพื้นหลังและเก็บขอบเรียบร้อยแล้ว");
+    } catch (e) {
+      setProcessMessage(
+        e instanceof Error
+          ? e.message
+          : "AI เปลี่ยนพื้นหลังไม่สำเร็จ กรุณาลองอีกครั้ง",
+      );
+    } finally {
+      setBackgroundProcessing(false);
     }
   }
   async function removeBackground() {
@@ -808,7 +837,8 @@ export default function Home() {
                     aria-label={`สีพื้นหลัง ${c}`}
                     className={bg === c ? "selected" : ""}
                     key={c}
-                    onClick={() => setBg(c)}
+                    onClick={() => changeBackground(c)}
+                    disabled={backgroundProcessing}
                     style={{ background: c }}
                   >
                     {bg === c && <Check />}
