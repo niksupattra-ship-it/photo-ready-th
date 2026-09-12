@@ -424,6 +424,12 @@ export default function Home() {
       );
       form.append("background", bg);
       form.append("operations", JSON.stringify(operations));
+      form.append(
+        "editMode",
+        operations.length === 1 && operations[0] === "hairstyle"
+          ? "hairstyle-only"
+          : "full",
+      );
       form.append("hairVolume", hairVolume);
       form.append("skinStyle", skinStyle);
       form.append("skinStrength", String(skinStrength));
