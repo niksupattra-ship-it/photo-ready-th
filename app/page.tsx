@@ -217,7 +217,10 @@ export default function Home() {
       v.includes(id) ? v.filter((x) => x !== id) : [...v, id],
     );
   }
-  async function makeTransparentCutout(src: string) {
+  async function makeTransparentCutout(
+    src: string,
+    sourceBackground?: string,
+  ) {
     const [{ FilesetResolver, ImageSegmenter }, img] = await Promise.all([
       import("@mediapipe/tasks-vision"),
       new Promise<HTMLImageElement>((resolve, reject) => {
@@ -245,9 +248,50 @@ export default function Home() {
       segmenter.close();
       throw new Error("ไม่พบตัวบุคคล");
     }
+    const maskCanvas = document.createElement("canvas");
+    maskCanvas.width = mask.width;
+    maskCanvas.height = mask.height;
+    const maskCtx = maskCanvas.getContext("2d");
+    if (!maskCtx) {
+      mask.close();
+      segmenter.close();
+      throw new Error("เปิดพื้นที่ประมวลผลไม่ได้");
+    }
+    const matte = maskCtx.createImageData(mask.width, mask.height);
+    const values = mask.getAsFloat32Array();
+    for (let i = 0; i < values.length; i++) {
+      const normalized = Math.max(0, Math.min(1, (values[i] - 0.04) / 0.9));
+      const smooth = normalized * normalized * (3 - 2 * normalized);
+      matte.data[i * 4] = 255;
+      matte.data[i * 4 + 1] = 255;
+      matte.data[i * 4 + 2] = 255;
+      matte.data[i * 4 + 3] = Math.round(smooth * 255);
+    }
+    maskCtx.putImageData(matte, 0, 0);
+
+    const alphaCanvas = document.createElement("canvas");
+    alphaCanvas.width = img.naturalWidth;
+    alphaCanvas.height = img.naturalHeight;
+    const alphaCtx = alphaCanvas.getContext("2d");
+    if (!alphaCtx) {
+      mask.close();
+      segmenter.close();
+      throw new Error("เปิดพื้นที่ประมวลผลไม่ได้");
+    }
+    alphaCtx.imageSmoothingEnabled = true;
+    alphaCtx.imageSmoothingQuality = "high";
+    alphaCtx.filter = "blur(1.25px)";
+    alphaCtx.drawImage(
+      maskCanvas,
+      -2,
+      -2,
+      alphaCanvas.width + 4,
+      alphaCanvas.height + 4,
+    );
+
     const canvas = document.createElement("canvas");
-    canvas.width = mask.width;
-    canvas.height = mask.height;
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
     const ctx = canvas.getContext("2d");
     if (!ctx) {
       mask.close();
@@ -256,10 +300,33 @@ export default function Home() {
     }
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
     const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const values = mask.getAsFloat32Array();
-    for (let i = 0; i < values.length; i++) {
-      const a = Math.max(0, Math.min(1, (values[i] - 0.08) / 0.86));
-      pixels.data[i * 4 + 3] = Math.round(a * 255);
+    const alphaPixels = alphaCtx.getImageData(
+      0,
+      0,
+      alphaCanvas.width,
+      alphaCanvas.height,
+    ).data;
+    const bgMatch = sourceBackground?.match(
+      /^#([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i,
+    );
+    const sourceRgb = bgMatch
+      ? bgMatch.slice(1).map((part) => Number.parseInt(part, 16))
+      : null;
+    for (let i = 0; i < canvas.width * canvas.height; i++) {
+      const alpha = alphaPixels[i * 4 + 3] / 255;
+      if (sourceRgb && alpha > 0.08 && alpha < 0.98) {
+        for (let channel = 0; channel < 3; channel++) {
+          const foreground =
+            (pixels.data[i * 4 + channel] -
+              (1 - alpha) * sourceRgb[channel]) /
+            alpha;
+          pixels.data[i * 4 + channel] = Math.max(
+            0,
+            Math.min(255, Math.round(foreground)),
+          );
+        }
+      }
+      pixels.data[i * 4 + 3] = alphaPixels[i * 4 + 3];
     }
     ctx.putImageData(pixels, 0, 0);
     mask.close();
@@ -308,7 +375,7 @@ export default function Home() {
       setBefore(false);
       setProcessMessage("AI ปรับภาพแบบ V3 สำเร็จ กำลังแยกพื้นหลัง…");
       try {
-        const transparent = await makeTransparentCutout(data.image);
+        const transparent = await makeTransparentCutout(data.image, bg);
         setCutout(transparent);
         setProcessMessage("AI ปรับภาพสำเร็จแล้ว เปลี่ยนสีพื้นหลังได้ทันที");
       } catch {
