@@ -108,9 +108,9 @@ const hairstyleOptions = [
     return {
       id: `hair-${number}`,
       label: `แบบ ${number}`,
-      // Use the exact model preview as the AI reference too. This keeps the
-      // hairstyle users see in the picker identical to the style AI receives.
-      image: `/hairstyle-previews/hair-${number}.png`,
+      // The generated preview and the live edit are both derived from this
+      // exact numbered hairstyle source.
+      image: `/hairstyles/hair-${number}.png`,
       preview: `/hairstyle-previews/hair-${number}.png`,
     };
   }),
