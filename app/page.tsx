@@ -145,7 +145,10 @@ export default function Home() {
   const [selected, setSelected] = useState("job-women-polite");
   const [outfitCategory, setOutfitCategory] = useState("สมัครงาน");
   const [beforeState, setBefore] = useState(false);
-  const before = aiComposited || beforeState;
+  const [compareOriginal, setCompareOriginal] = useState<string | null>(null);
+  const [comparePreparing, setComparePreparing] = useState(false);
+  const compareMode = aiComposited && beforeState;
+  const showOriginalOnly = !aiComposited && beforeState;
   const [zoom, setZoom] = useState(100);
   const [x, setX] = useState(0),
     [y, setY] = useState(0),
@@ -222,6 +225,8 @@ export default function Home() {
       setOriginal(url);
       setAiBaseImage(null);
       setAiComposited(false);
+      setCompareOriginal(null);
+      setBefore(false);
       setCutout(null);
       setProcessMessage("");
     }
@@ -351,6 +356,109 @@ export default function Home() {
     if (!blob) throw new Error("สร้างภาพโปร่งใสไม่ได้");
     return URL.createObjectURL(blob);
   }
+  async function makeMatchedOriginalPreview(sourceSrc: string, resultSrc: string) {
+    const loadImage = (src: string) =>
+      new Promise<HTMLImageElement>((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = reject;
+        image.src = src;
+      });
+
+    const [{ FilesetResolver, FaceDetector }, sourceImage, resultImage] =
+      await Promise.all([
+        import("@mediapipe/tasks-vision"),
+        loadImage(sourceSrc),
+        loadImage(resultSrc),
+      ]);
+    const vision = await FilesetResolver.forVisionTasks(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm",
+    );
+    const detector = await FaceDetector.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath:
+          "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/latest/blaze_face_short_range.tflite",
+      },
+      runningMode: "IMAGE",
+      minDetectionConfidence: 0.5,
+    });
+
+    try {
+      const sourceFace = detector.detect(sourceImage).detections[0]?.boundingBox;
+      const resultFace = detector.detect(resultImage).detections[0]?.boundingBox;
+      const canvas = document.createElement("canvas");
+      canvas.width = resultImage.naturalWidth || 900;
+      canvas.height = resultImage.naturalHeight || 1200;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("เปิดพื้นที่เปรียบเทียบไม่ได้");
+
+      const drawCover = () => {
+        const scale = Math.max(
+          canvas.width / sourceImage.naturalWidth,
+          canvas.height / sourceImage.naturalHeight,
+        );
+        const width = sourceImage.naturalWidth * scale;
+        const height = sourceImage.naturalHeight * scale;
+        ctx.drawImage(
+          sourceImage,
+          (canvas.width - width) / 2,
+          (canvas.height - height) / 2,
+          width,
+          height,
+        );
+      };
+
+      if (!sourceFace || !resultFace) {
+        drawCover();
+        return canvas.toDataURL("image/jpeg", 0.94);
+      }
+
+      const sourceFaceCenterX = sourceFace.originX + sourceFace.width / 2;
+      const sourceFaceCenterY = sourceFace.originY + sourceFace.height / 2;
+      const resultFaceCenterX = resultFace.originX + resultFace.width / 2;
+      const resultFaceCenterY = resultFace.originY + resultFace.height / 2;
+      const scale = resultFace.height / Math.max(1, sourceFace.height);
+      const drawWidth = sourceImage.naturalWidth * scale;
+      const drawHeight = sourceImage.naturalHeight * scale;
+      const drawX = resultFaceCenterX - sourceFaceCenterX * scale;
+      const drawY = resultFaceCenterY - sourceFaceCenterY * scale;
+
+      // เติมเฉพาะพื้นที่นอกภาพต้นฉบับด้วยภาพเดิมแบบเบลอ เพื่อไม่สร้างรายละเอียดใบหน้าใหม่
+      ctx.save();
+      ctx.filter = "blur(24px) brightness(0.96)";
+      const backgroundScale = Math.max(
+        canvas.width / sourceImage.naturalWidth,
+        canvas.height / sourceImage.naturalHeight,
+      );
+      const backgroundWidth = sourceImage.naturalWidth * backgroundScale;
+      const backgroundHeight = sourceImage.naturalHeight * backgroundScale;
+      ctx.drawImage(
+        sourceImage,
+        (canvas.width - backgroundWidth) / 2,
+        (canvas.height - backgroundHeight) / 2,
+        backgroundWidth,
+        backgroundHeight,
+      );
+      ctx.restore();
+
+      ctx.drawImage(sourceImage, drawX, drawY, drawWidth, drawHeight);
+      return canvas.toDataURL("image/jpeg", 0.94);
+    } finally {
+      detector.close();
+    }
+  }
+
+  async function prepareComparison(sourceSrc: string, resultSrc: string) {
+    setComparePreparing(true);
+    try {
+      setCompareOriginal(await makeMatchedOriginalPreview(sourceSrc, resultSrc));
+    } catch {
+      setCompareOriginal(sourceSrc);
+    } finally {
+      setComparePreparing(false);
+    }
+  }
+
   async function aiEdit() {
     if (!aiSelected.length) {
       setProcessMessage("กรุณาเลือกอย่างน้อย 1 รายการ");
@@ -400,6 +508,7 @@ export default function Home() {
       setAiComposited(true);
       setCutout(null);
       setBefore(false);
+      void prepareComparison(baseOriginal, data.image);
       setProcessMessage("AI ปรับภาพแบบ V3 สำเร็จแล้ว");
     } catch (e) {
       setProcessMessage(
@@ -527,21 +636,39 @@ export default function Home() {
       <div className="photoid-page">
         <section className="photoid-preview-card">
           <div className="photoid-card-heading"><h2>ภาพตัวอย่าง</h2><small>มาตรฐานรูปสมัครงาน 3:4</small></div>
-          <div ref={stageRef} className="photoid-stage" style={{ background: bg }}
-            onPointerDown={(e) => { dragStart.current = { px: e.clientX, py: e.clientY, x, y }; e.currentTarget.setPointerCapture(e.pointerId); }}
-            onPointerMove={(e) => { if (!dragStart.current) return; setX(dragStart.current.x + e.clientX - dragStart.current.px); setY(dragStart.current.y + e.clientY - dragStart.current.py); }}
-            onPointerUp={() => { dragStart.current = null; }} onPointerCancel={() => { dragStart.current = null; }}>
-            <img className={`photoid-person ${aiComposited ? "ai-result" : ""}`} src={shownSrc} alt="ภาพลูกค้า"
-              style={{ transform: `translate(${x}px, ${y}px) scale(${zoom / 100})`, filter: `brightness(${100 + skin}%)` }} />
-            {!before && !aiComposited && <img className="photoid-outfit-layer" src={outfit.image} alt={outfit.label}
-              style={{ transform: `translateY(${hair * 2}px) scale(${1 + neck / 100})` }} />}
-            {backgroundProcessing && <div className="photoid-loading"><LoaderCircle className="spin" /><b>AI กำลังเปลี่ยนพื้นหลัง…</b><small>กรุณารอสักครู่</small></div>}
-          </div>
+          {compareMode ? (
+            <div className="photoid-compare-stage" aria-label="เปรียบเทียบก่อนและหลัง">
+              <div className="photoid-compare-pane">
+                <img src={compareOriginal ?? baseOriginal} alt="ภาพต้นฉบับ" />
+                <span>ก่อนปรับ</span>
+              </div>
+              <div className="photoid-compare-pane">
+                <img src={shownSrc} alt="ภาพหลังปรับ" />
+                <span>หลังปรับ</span>
+              </div>
+              {comparePreparing && (
+                <div className="photoid-compare-loading">
+                  <LoaderCircle className="spin" /> กำลังปรับระยะภาพต้นฉบับ…
+                </div>
+              )}
+            </div>
+          ) : (
+            <div ref={stageRef} className="photoid-stage" style={{ background: bg }}
+              onPointerDown={(e) => { dragStart.current = { px: e.clientX, py: e.clientY, x, y }; e.currentTarget.setPointerCapture(e.pointerId); }}
+              onPointerMove={(e) => { if (!dragStart.current) return; setX(dragStart.current.x + e.clientX - dragStart.current.px); setY(dragStart.current.y + e.clientY - dragStart.current.py); }}
+              onPointerUp={() => { dragStart.current = null; }} onPointerCancel={() => { dragStart.current = null; }}>
+              <img className={`photoid-person ${aiComposited ? "ai-result" : ""}`} src={shownSrc} alt="ภาพลูกค้า"
+                style={{ transform: `translate(${x}px, ${y}px) scale(${zoom / 100})`, filter: `brightness(${100 + skin}%)` }} />
+              {!showOriginalOnly && !aiComposited && <img className="photoid-outfit-layer" src={outfit.image} alt={outfit.label}
+                style={{ transform: `translateY(${hair * 2}px) scale(${1 + neck / 100})` }} />}
+              {backgroundProcessing && <div className="photoid-loading"><LoaderCircle className="spin" /><b>AI กำลังเปลี่ยนพื้นหลัง…</b><small>กรุณารอสักครู่</small></div>}
+            </div>
+          )}
           <div className="photoid-preview-actions">
-            <button onClick={() => setZoom(Math.max(70, zoom - 5))}><ZoomOut /></button><b>{zoom}%</b>
+            {!compareMode && <><button onClick={() => setZoom(Math.max(70, zoom - 5))}><ZoomOut /></button><b>{zoom}%</b>
             <button onClick={() => setZoom(Math.min(130, zoom + 5))}><ZoomIn /></button>
-            <button onClick={reset}><RotateCcw /> รีเซ็ต</button>
-            <button onClick={() => setBefore(!before)}><ImageIcon /> {before ? "ดูหลังปรับ" : "ดูต้นฉบับ"}</button>
+            <button onClick={reset}><RotateCcw /> รีเซ็ต</button></>}
+            <button onClick={() => setBefore(!beforeState)}><ImageIcon /> {aiComposited ? (compareMode ? "ดูรูปหลังปรับ" : "เปรียบเทียบก่อน–หลัง") : (showOriginalOnly ? "ดูหลังปรับ" : "ดูต้นฉบับ")}</button>
           </div>
           <div className="photoid-result-title">ตัวอย่างผลลัพธ์</div>
           <div className="photoid-result-grid">
