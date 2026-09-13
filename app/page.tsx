@@ -236,10 +236,7 @@ export default function Home() {
       v.includes(id) ? v.filter((x) => x !== id) : [...v, id],
     );
   }
-  async function restoreOriginalFace(
-    sourceUrl: string,
-    editedUrl: string,
-  ): Promise<string> {
+  async function createHairEditMask(sourceUrl: string): Promise<Blob | null> {
     const loadImage = (src: string) =>
       new Promise<HTMLImageElement>((resolve, reject) => {
         const image = new Image();
@@ -248,12 +245,10 @@ export default function Home() {
         image.src = src;
       });
     try {
-      const [{ FilesetResolver, FaceDetector }, source, edited] =
-        await Promise.all([
-          import("@mediapipe/tasks-vision"),
-          loadImage(sourceUrl),
-          loadImage(editedUrl),
-        ]);
+      const [{ FilesetResolver, FaceDetector }, source] = await Promise.all([
+        import("@mediapipe/tasks-vision"),
+        loadImage(sourceUrl),
+      ]);
       const vision = await FilesetResolver.forVisionTasks(
         "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm",
       );
@@ -267,40 +262,52 @@ export default function Home() {
       });
       const face = detector.detect(source).detections[0]?.boundingBox;
       detector.close();
-      if (!face) return editedUrl;
+      if (!face) return null;
 
       const canvas = document.createElement("canvas");
-      canvas.width = edited.naturalWidth;
-      canvas.height = edited.naturalHeight;
+      canvas.width = source.naturalWidth;
+      canvas.height = source.naturalHeight;
       const ctx = canvas.getContext("2d");
-      if (!ctx) return editedUrl;
-      ctx.drawImage(edited, 0, 0, canvas.width, canvas.height);
-
-      const layer = document.createElement("canvas");
-      layer.width = canvas.width;
-      layer.height = canvas.height;
-      const layerCtx = layer.getContext("2d");
-      if (!layerCtx) return editedUrl;
-      layerCtx.drawImage(source, 0, 0, canvas.width, canvas.height);
-
-      const scaleX = canvas.width / source.naturalWidth;
-      const scaleY = canvas.height / source.naturalHeight;
-      const cx = (face.originX + face.width / 2) * scaleX;
-      // ล็อกเฉพาะอัตลักษณ์กลางใบหน้า ไม่คลุมหน้าผาก ไรผม หรือหน้าม้า
-      const cy = (face.originY + face.height * 0.62) * scaleY;
-      const rx = face.width * 0.39 * scaleX;
-      const ry = face.height * 0.35 * scaleY;
-      layerCtx.globalCompositeOperation = "destination-in";
-      layerCtx.filter = "blur(2px)";
-      layerCtx.beginPath();
-      layerCtx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
-      layerCtx.fill();
-      layerCtx.filter = "none";
-      layerCtx.globalCompositeOperation = "source-over";
-      ctx.drawImage(layer, 0, 0);
-      return canvas.toDataURL("image/png");
+      if (!ctx) return null;
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const cx = face.originX + face.width / 2;
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.beginPath();
+      ctx.ellipse(
+        cx,
+        face.originY + face.height * 0.25,
+        face.width * 0.95,
+        face.height * 1.05,
+        0,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+      ctx.fillRect(
+        cx - face.width * 0.92,
+        face.originY + face.height * 0.2,
+        face.width * 1.84,
+        face.height * 2.85,
+      );
+      ctx.globalCompositeOperation = "source-over";
+      ctx.fillStyle = "#000";
+      ctx.beginPath();
+      ctx.ellipse(
+        cx,
+        face.originY + face.height * 0.62,
+        face.width * 0.46,
+        face.height * 0.39,
+        0,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+      return await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob(resolve, "image/png"),
+      );
     } catch {
-      return editedUrl;
+      return null;
     }
   }
   async function aiEdit(hairstyleId = hairstyle) {
@@ -327,8 +334,12 @@ export default function Home() {
       form.append("skinStyle", skinStyle);
       form.append("skinStrength", String(skinStrength));
       if (hairOnly && selectedHairstyle?.image) {
-        const ref = await fetch(selectedHairstyle.image);
+        const [ref, editMask] = await Promise.all([
+          fetch(selectedHairstyle.image),
+          createHairEditMask(sourceUrl),
+        ]);
         form.append("hairstyleRef", await ref.blob(), `${hairstyleId}.png`);
+        if (editMask) form.append("mask", editMask, "hair-edit-mask.png");
         form.append("hairstyle", selectedHairstyle.label);
         form.append("operations", JSON.stringify(["hairstyle"]));
         form.append("editMode", "hairstyle-only");
@@ -343,14 +354,13 @@ export default function Home() {
       };
       if (!response.ok || !data.image)
         throw new Error(data.error || "AI ปรับภาพไม่สำเร็จ");
-      const finalImage = hairOnly
-        ? await restoreOriginalFace(sourceUrl, data.image)
-        : data.image;
+      const finalImage = data.image;
       setOriginal(finalImage);
       setX(0);
       setY(0);
       setZoom(100);
-      if (aiComposited) await removeBackground(finalImage);
+      if (hairOnly && aiComposited) setCutout(finalImage);
+      else if (aiComposited) await removeBackground(finalImage);
       else setCutout(null);
       setBefore(false);
       setProcessMessage(
