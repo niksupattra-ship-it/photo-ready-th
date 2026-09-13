@@ -141,6 +141,7 @@ export default function Home() {
   );
   const [skinStrength, setSkinStrength] = useState(15);
   const [hairstyle, setHairstyle] = useState("original");
+  const appliedHairstyle = useRef("original");
   const hairstyleBase = useRef<string | null>(null);
   const outfitCutout = useRef<string | null>(null);
   const uploadBase = useRef("/demo/original.png");
@@ -227,6 +228,7 @@ export default function Home() {
       setAiComposited(false);
       setCutout(null);
       setHairstyle("original");
+      appliedHairstyle.current = "original";
       hairstyleBase.current = null;
       setProcessMessage("");
     }
@@ -330,6 +332,10 @@ export default function Home() {
   }
   async function aiEdit(hairstyleId = hairstyle) {
     const hairOnly = hairstyleId !== "original";
+    if (hairOnly && appliedHairstyle.current === hairstyleId) {
+      setProcessMessage("ทรงผมนี้ถูกปรับแล้ว ไม่ประมวลผลซ้ำ");
+      return;
+    }
     if (!hairOnly && !aiSelected.length) {
       setProcessMessage("กรุณาเลือกอย่างน้อย 1 รายการ");
       return;
@@ -377,9 +383,14 @@ export default function Home() {
       setX(0);
       setY(0);
       setZoom(100);
-      // Hairstyle results are intentionally one finished opaque portrait.
-      // This mirrors the reliable flow used to create the hairstyle previews.
-      setCutout(null);
+      if (hairOnly) {
+        appliedHairstyle.current = hairstyleId;
+        // Guarantee that the uploaded wall/background never comes back in the
+        // preview. The downloaded JPEG is flattened onto the selected color.
+        await removeBackground(finalImage);
+      } else {
+        setCutout(null);
+      }
       setBefore(false);
       setProcessMessage(
         hairOnly
@@ -434,6 +445,7 @@ export default function Home() {
       outfitBase.current = data.image;
       hairstyleBase.current = data.image;
       setHairstyle("original");
+      appliedHairstyle.current = "original";
       setAiComposited(true);
       const separated = await removeBackground(data.image);
       outfitCutout.current = separated;
@@ -1063,6 +1075,7 @@ export default function Home() {
                     setCutout(null);
                     setAiComposited(false);
                     setHairstyle("original");
+                    appliedHairstyle.current = "original";
                     outfitBase.current = null;
                     outfitCutout.current = null;
                     hairstyleBase.current = null;
