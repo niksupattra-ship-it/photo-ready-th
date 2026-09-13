@@ -124,6 +124,7 @@ export default function Home() {
   } | null>(null);
   const [original, setOriginal] = useState("/demo/original.png");
   const [baseOriginal, setBaseOriginal] = useState("/demo/original.png");
+  const [hasUploadedImage, setHasUploadedImage] = useState(false);
   const [aiBaseImage, setAiBaseImage] = useState<string | null>(null);
   const [aiComposited, setAiComposited] = useState(false);
   const [cutout, setCutout] = useState<string | null>(null);
@@ -223,6 +224,7 @@ export default function Home() {
       const url = URL.createObjectURL(f);
       setBaseOriginal(url);
       setOriginal(url);
+      setHasUploadedImage(true);
       setAiBaseImage(null);
       setAiComposited(false);
       setCompareOriginal(null);
@@ -636,7 +638,15 @@ export default function Home() {
       <div className="photoid-page">
         <section className="photoid-preview-card">
           <div className="photoid-card-heading"><h2>ภาพตัวอย่าง</h2><small>มาตรฐานรูปสมัครงาน 3:4</small></div>
-          {compareMode ? (
+          {!hasUploadedImage ? (
+            <div className="photoid-empty-stage" aria-label="พื้นที่เพิ่มรูป">
+              <button className="photoid-empty-add" onClick={() => inputRef.current?.click()}>
+                <span className="photoid-empty-plus">+</span>
+                <b>เพิ่มรูป</b>
+                <small>JPG หรือ PNG สูงสุด 10 MB</small>
+              </button>
+            </div>
+          ) : compareMode ? (
             <div className="photoid-compare-stage" aria-label="เปรียบเทียบก่อนและหลัง">
               <div className="photoid-compare-pane">
                 <img src={compareOriginal ?? baseOriginal} alt="ภาพต้นฉบับ" />
@@ -664,12 +674,14 @@ export default function Home() {
               {backgroundProcessing && <div className="photoid-loading"><LoaderCircle className="spin" /><b>AI กำลังเปลี่ยนพื้นหลัง…</b><small>กรุณารอสักครู่</small></div>}
             </div>
           )}
-          <div className="photoid-preview-actions">
-            {!compareMode && <><button onClick={() => setZoom(Math.max(70, zoom - 5))}><ZoomOut /></button><b>{zoom}%</b>
-            <button onClick={() => setZoom(Math.min(130, zoom + 5))}><ZoomIn /></button>
-            <button onClick={reset}><RotateCcw /> รีเซ็ต</button></>}
-            <button onClick={() => setBefore(!beforeState)}><ImageIcon /> {aiComposited ? (compareMode ? "ดูรูปหลังปรับ" : "เปรียบเทียบก่อน–หลัง") : (showOriginalOnly ? "ดูหลังปรับ" : "ดูต้นฉบับ")}</button>
-          </div>
+          {hasUploadedImage && (
+            <div className="photoid-preview-actions">
+              {!compareMode && <><button onClick={() => setZoom(Math.max(70, zoom - 5))}><ZoomOut /></button><b>{zoom}%</b>
+              <button onClick={() => setZoom(Math.min(130, zoom + 5))}><ZoomIn /></button>
+              <button onClick={reset}><RotateCcw /> รีเซ็ต</button></>}
+              <button onClick={() => setBefore(!beforeState)}><ImageIcon /> {aiComposited ? (compareMode ? "ดูรูปหลังปรับ" : "เปรียบเทียบก่อน–หลัง") : (showOriginalOnly ? "ดูหลังปรับ" : "ดูต้นฉบับ")}</button>
+            </div>
+          )}
           <div className="photoid-result-title">ตัวอย่างผลลัพธ์</div>
           <div className="photoid-result-grid">
             <div className="photoid-example"><img src="/demo/official.jpg" alt="รูปสมัครงาน" /><b>รูปสมัครงาน</b></div>
