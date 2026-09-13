@@ -677,7 +677,7 @@ export default function Home() {
           {hasUploadedImage && (
             <div className="photoid-preview-actions">
               {!compareMode && <><button onClick={() => setZoom(Math.max(70, zoom - 5))}><ZoomOut /></button><b>{zoom}%</b>
-              <button onClick={() => setZoom(Math.min(130, zoom + 5))}><ZoomIn /></button>
+              <button onClick={() => setZoom(Math.min(180, zoom + 5))}><ZoomIn /></button>
               <button onClick={reset}><RotateCcw /> รีเซ็ต</button></>}
               <button onClick={() => setBefore(!beforeState)}><ImageIcon /> {aiComposited ? (compareMode ? "ดูรูปหลังปรับ" : "เปรียบเทียบก่อน–หลัง") : (showOriginalOnly ? "ดูหลังปรับ" : "ดูต้นฉบับ")}</button>
             </div>
