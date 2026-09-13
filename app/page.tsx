@@ -80,6 +80,17 @@ const aiOptions = [
     detail: "เก็บขอบละเอียด ไม่แข็ง",
   },
 ];
+const hairstyleOptions = [
+  { id: "original", label: "ทรงเดิม", image: null },
+  ...Array.from({ length: 29 }, (_, index) => {
+    const number = String(index + 1).padStart(2, "0");
+    return {
+      id: `hair-${number}`,
+      label: `แบบ ${number}`,
+      image: `/hairstyles/hair-${number}.png`,
+    };
+  }),
+];
 
 function Control({
   label,
@@ -142,7 +153,7 @@ export default function Home() {
     "ธรรมชาติ" | "สดใส" | "สตูดิโอ"
   >("ธรรมชาติ");
   const [skinStrength, setSkinStrength] = useState(15);
-  const [hairstyle, setHairstyle] = useState("คงทรงเดิม");
+  const [hairstyle, setHairstyle] = useState("original");
   const [processMessage, setProcessMessage] = useState("");
   const [selected, setSelected] = useState("women-suit");
   const [beforeState, setBefore] = useState(false);
@@ -376,7 +387,15 @@ export default function Home() {
       form.append("hairVolume", hairVolume);
       form.append("skinStyle", skinStyle);
       form.append("skinStrength", String(skinStrength));
-      form.append("hairstyle", hairstyle);
+      const selectedHairstyle = hairstyleOptions.find(
+        (option) => option.id === hairstyle,
+      );
+      form.append("hairstyle", selectedHairstyle?.label || "ทรงเดิม");
+      if (selectedHairstyle?.image) {
+        const hairstyleSource = await fetch(selectedHairstyle.image);
+        const hairstyleBlob = await hairstyleSource.blob();
+        form.append("hairstyleRef", hairstyleBlob, `${hairstyle}.png`);
+      }
       const response = await fetch("/api/ai-edit", {
         method: "POST",
         body: form,
@@ -804,21 +823,19 @@ export default function Home() {
                     <small>AI จะรักษาใบหน้าและแนวไรผมเดิม</small>
                   </div>
                   <div className="hairstyle-options">
-                    {[
-                      "คงทรงเดิม",
-                      "รวบต่ำสุภาพ",
-                      "ผมตรงประบ่า",
-                      "บ๊อบสุภาพ",
-                      "รองทรงสุภาพ",
-                      "แสกข้างสุภาพ",
-                    ].map((style) => (
+                    {hairstyleOptions.map((style) => (
                       <button
                         type="button"
-                        key={style}
-                        className={hairstyle === style ? "active" : ""}
-                        onClick={() => setHairstyle(style)}
+                        key={style.id}
+                        className={hairstyle === style.id ? "active" : ""}
+                        onClick={() => setHairstyle(style.id)}
                       >
-                        {style}
+                        {style.image ? (
+                          <img src={style.image} alt={style.label} />
+                        ) : (
+                          <UserRound />
+                        )}
+                        <span>{style.label}</span>
                       </button>
                     ))}
                   </div>
