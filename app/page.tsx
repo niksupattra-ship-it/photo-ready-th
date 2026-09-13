@@ -236,6 +236,72 @@ export default function Home() {
       v.includes(id) ? v.filter((x) => x !== id) : [...v, id],
     );
   }
+  async function restoreOriginalFace(
+    sourceUrl: string,
+    editedUrl: string,
+  ): Promise<string> {
+    const loadImage = (src: string) =>
+      new Promise<HTMLImageElement>((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = reject;
+        image.src = src;
+      });
+    try {
+      const [{ FilesetResolver, FaceDetector }, source, edited] =
+        await Promise.all([
+          import("@mediapipe/tasks-vision"),
+          loadImage(sourceUrl),
+          loadImage(editedUrl),
+        ]);
+      const vision = await FilesetResolver.forVisionTasks(
+        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm",
+      );
+      const detector = await FaceDetector.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetPath:
+            "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/latest/blaze_face_short_range.tflite",
+        },
+        runningMode: "IMAGE",
+        minDetectionConfidence: 0.5,
+      });
+      const face = detector.detect(source).detections[0]?.boundingBox;
+      detector.close();
+      if (!face) return editedUrl;
+
+      const canvas = document.createElement("canvas");
+      canvas.width = edited.naturalWidth;
+      canvas.height = edited.naturalHeight;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return editedUrl;
+      ctx.drawImage(edited, 0, 0, canvas.width, canvas.height);
+
+      const layer = document.createElement("canvas");
+      layer.width = canvas.width;
+      layer.height = canvas.height;
+      const layerCtx = layer.getContext("2d");
+      if (!layerCtx) return editedUrl;
+      layerCtx.drawImage(source, 0, 0, canvas.width, canvas.height);
+
+      const scaleX = canvas.width / source.naturalWidth;
+      const scaleY = canvas.height / source.naturalHeight;
+      const cx = (face.originX + face.width / 2) * scaleX;
+      const cy = (face.originY + face.height * 0.56) * scaleY;
+      const rx = face.width * 0.43 * scaleX;
+      const ry = face.height * 0.47 * scaleY;
+      layerCtx.globalCompositeOperation = "destination-in";
+      layerCtx.filter = "blur(2px)";
+      layerCtx.beginPath();
+      layerCtx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+      layerCtx.fill();
+      layerCtx.filter = "none";
+      layerCtx.globalCompositeOperation = "source-over";
+      ctx.drawImage(layer, 0, 0);
+      return canvas.toDataURL("image/png");
+    } catch {
+      return editedUrl;
+    }
+  }
   async function aiEdit(hairstyleId = hairstyle) {
     if (!aiSelected.length) {
       setProcessMessage("กรุณาเลือกอย่างน้อย 1 รายการ");
@@ -273,12 +339,15 @@ export default function Home() {
       };
       if (!response.ok || !data.image)
         throw new Error(data.error || "AI ปรับภาพไม่สำเร็จ");
-      setOriginal(data.image);
+      const finalImage = hairOnly
+        ? await restoreOriginalFace(sourceUrl, data.image)
+        : data.image;
+      setOriginal(finalImage);
       setX(0);
       setY(0);
       setZoom(100);
-      if (hairOnly && aiComposited) setCutout(data.image);
-      else if (aiComposited) await removeBackground(data.image);
+      if (hairOnly && aiComposited) setCutout(finalImage);
+      else if (aiComposited) await removeBackground(finalImage);
       else setCutout(null);
       setBefore(false);
       setProcessMessage(
@@ -396,19 +465,39 @@ export default function Home() {
       const result = segmenter.segment(img);
       const mask = result.confidenceMasks?.[0];
       if (!mask) throw new Error("ไม่พบตัวบุคคล");
+
+      // สร้างหน้ากากที่ความละเอียดต้นทางก่อน แล้วค่อยขยายแบบ smoothing
+      // เพื่อไม่ให้ภาพบุคคลถูกลดเหลือเท่าความละเอียดของโมเดล segmentation
+      const smallMask = document.createElement("canvas");
+      smallMask.width = mask.width;
+      smallMask.height = mask.height;
+      const smallCtx = smallMask.getContext("2d");
+      if (!smallCtx) throw new Error("สร้างหน้ากากไม่ได้");
+      const maskPixels = smallCtx.createImageData(mask.width, mask.height);
+      const values = mask.getAsFloat32Array();
+      for (let i = 0; i < values.length; i++) {
+        const t = Math.max(0, Math.min(1, (values[i] - 0.18) / 0.68));
+        const alpha = t * t * (3 - 2 * t);
+        maskPixels.data[i * 4] = 255;
+        maskPixels.data[i * 4 + 1] = 255;
+        maskPixels.data[i * 4 + 2] = 255;
+        maskPixels.data[i * 4 + 3] = Math.round(alpha * 255);
+      }
+      smallCtx.putImageData(maskPixels, 0, 0);
+
       const canvas = document.createElement("canvas");
-      canvas.width = mask.width;
-      canvas.height = mask.height;
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("เปิดพื้นที่ประมวลผลไม่ได้");
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const values = mask.getAsFloat32Array();
-      for (let i = 0; i < values.length; i++) {
-        const alpha = Math.max(0, Math.min(1, (values[i] - 0.06) / 0.88));
-        pixels.data[i * 4 + 3] = Math.round(alpha * 255);
-      }
-      ctx.putImageData(pixels, 0, 0);
+      ctx.globalCompositeOperation = "destination-in";
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.filter = "blur(0.65px)";
+      ctx.drawImage(smallMask, 0, 0, canvas.width, canvas.height);
+      ctx.filter = "none";
+      ctx.globalCompositeOperation = "source-over";
       mask.close();
       segmenter.close();
       const blob = await new Promise<Blob | null>((resolve) =>
