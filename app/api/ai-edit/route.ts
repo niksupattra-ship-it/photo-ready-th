@@ -64,7 +64,10 @@ export async function POST(request: Request) {
         ? `Create one finished formal front-facing ID portrait. Image 1 is the absolute source of truth for the person. Image 2 is clothing reference only: dress the person in ${outfitLabel}, matching its collar, lapels, fabric, construction, silhouette, and proportions. Preserve the source background unchanged; background removal is performed separately without generative AI. ${chosen.join(" ")}${volumeInstruction} ABSOLUTE FACE, SKIN, AND LIGHTING LOCK: preserve the entire face and every visible skin area from image 1, including exact identity, facial geometry, expression, pores, blemishes, fine lines, complexion, exposure, highlights, shadows, color temperature, white balance, and illumination. Treat the face and skin as locked source pixels. Never retouch, smooth, blur, airbrush, brighten, whiten, recolor, relight, denoise, add makeup, beautify, repaint, or regenerate face or skin. Preserve the hair and head size. Change only the clothing and the minimum necessary collar/neck boundary. COMPOSITION LOCK: show the complete left and right shoulder lines and both upper arms fully inside the frame with a small, even safe margin on both sides. No sleeve, arm, shoulder, lapel, or garment edge may touch or be cut by the left or right canvas edge. Fit the complete person-and-outfit composition into the existing canvas by applying only one uniform proportional scale to the whole subject when necessary; never stretch, squeeze, widen, narrow, or independently resize the head, face, neck, shoulders, arms, or torso. Keep the subject centered. Keep the head, neck, shoulders, outfit, and torso at one uniform natural adult photographic scale. Never make the head oversized or the body narrow or miniature. Preserve the canvas, camera perspective, and background. The outfit must show realistic woven fabric, seams, folds, depth, and non-uniform camera highlights—never plastic, illustrated, or synthetic. The result must look like the same real person genuinely photographed wearing the selected outfit.`
         : `Edit this formal front-facing ID portrait only as explicitly requested. ${chosen.join(" ")}${volumeInstruction} ABSOLUTE FACE, SKIN, AND LIGHTING LOCK: preserve identity, facial structure, expression, age, every skin pixel and texture, complexion, exposure, highlights, shadows, color temperature, white balance, and illumination exactly. Never retouch, smooth, blur, airbrush, brighten, whiten, recolor, relight, denoise, add makeup, beautify, reshape, replace, or regenerate face or skin. Keep camera angle, crop, clothing, background, and all unrelated pixels unchanged. The result must look like the same genuine photograph, not AI-generated.`;
     const body = new FormData();
-    body.append("model", "gpt-image-1.5");
+    body.append(
+      "model",
+      hairstyleOnly ? "gpt-image-2.5-sunburst" : "gpt-image-1.5",
+    );
     body.append("image[]", image, image.name || "portrait.png");
     if (outfitChange)
       body.append("image[]", outfit, outfit.name || "outfit-reference.png");
@@ -75,7 +78,7 @@ export async function POST(request: Request) {
         hairstyleRef.name || "hairstyle.png",
       );
     body.append("prompt", prompt);
-    body.append("input_fidelity", "high");
+    if (!hairstyleOnly) body.append("input_fidelity", "high");
     body.append("quality", "high");
     body.append("output_format", "png");
     body.append("size", "1024x1536");
