@@ -269,35 +269,53 @@ export default function Home() {
       canvas.height = source.naturalHeight;
       const ctx = canvas.getContext("2d");
       if (!ctx) return null;
-      ctx.fillStyle = "#000";
+      // Opaque = protected. Transparent = the only region AI may edit.
+      ctx.fillStyle = "rgba(0,0,0,1)";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       const cx = face.originX + face.width / 2;
+      const left = face.originX;
+      const right = face.originX + face.width;
+      const top = face.originY;
       ctx.globalCompositeOperation = "destination-out";
+
+      // Crown, fringe and outer head silhouette.
       ctx.beginPath();
       ctx.ellipse(
         cx,
-        face.originY + face.height * 0.25,
-        face.width * 0.95,
-        face.height * 1.05,
+        top + face.height * 0.02,
+        face.width * 0.92,
+        face.height * 0.88,
         0,
         0,
         Math.PI * 2,
       );
       ctx.fill();
+
+      // Left and right hair lengths. Keep the central face, neck and outfit
+      // protected while allowing short, long, tied and loose hairstyles.
       ctx.fillRect(
-        cx - face.width * 0.92,
-        face.originY + face.height * 0.2,
-        face.width * 1.84,
-        face.height * 2.85,
+        left - face.width * 0.72,
+        top - face.height * 0.22,
+        face.width * 0.9,
+        face.height * 3.15,
       );
+      ctx.fillRect(
+        right - face.width * 0.18,
+        top - face.height * 0.22,
+        face.width * 0.9,
+        face.height * 3.15,
+      );
+
+      // Re-protect the complete face and forehead interior. This prevents a
+      // reference model's face from being blended into the customer's face.
       ctx.globalCompositeOperation = "source-over";
-      ctx.fillStyle = "#000";
+      ctx.fillStyle = "rgba(0,0,0,1)";
       ctx.beginPath();
       ctx.ellipse(
         cx,
-        face.originY + face.height * 0.62,
-        face.width * 0.46,
-        face.height * 0.39,
+        top + face.height * 0.46,
+        face.width * 0.5,
+        face.height * 0.69,
         0,
         0,
         Math.PI * 2,
@@ -342,6 +360,10 @@ export default function Home() {
         form.append("hairstyle", selectedHairstyle.label);
         form.append("operations", JSON.stringify(["hairstyle"]));
         form.append("editMode", "hairstyle-only");
+        const editMask = await createHairEditMask(sourceUrl);
+        if (!editMask)
+          throw new Error("ตรวจพื้นที่ทรงผมไม่สำเร็จ กรุณาใช้รูปหน้าตรงที่เห็นศีรษะชัด");
+        form.append("mask", editMask, "hair-edit-mask.png");
       }
       const response = await fetch("/api/ai-edit", {
         method: "POST",
