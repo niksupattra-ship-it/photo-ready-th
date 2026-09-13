@@ -19,7 +19,7 @@
 }
 
 .photo-stage > .person-layer.ai-result {
-  object-fit: cover !important;
+  object-fit: contain !important;
 }
 
 .background-ai-loading {
@@ -157,7 +157,7 @@
   height: 100%;
 }
 .photoid-person { object-fit: contain; z-index: 1; transform-origin: center center; }
-.photoid-person.ai-result { object-fit: cover; }
+.photoid-person.ai-result { object-fit: contain; }
 .photoid-outfit-layer { object-fit: contain; object-position: center bottom; z-index: 2; pointer-events: none; transform-origin: center bottom; }
 .photoid-loading {
   position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; align-items: center;
@@ -278,7 +278,7 @@
   width: 100%;
   height: 100%;
   display: block;
-  object-fit: cover;
+  object-fit: contain;
   object-position: center center;
 }
 .photoid-compare-pane span {

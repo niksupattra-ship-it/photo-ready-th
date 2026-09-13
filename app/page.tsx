@@ -595,9 +595,7 @@ export default function Home() {
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, 900, 1200);
     const scale =
-      (aiComposited
-        ? Math.max(900 / person.width, 1200 / person.height)
-        : Math.min(900 / person.width, 1200 / person.height)) *
+      Math.min(900 / person.width, 1200 / person.height) *
       (zoom / 100);
     const pw = person.width * scale,
       ph = person.height * scale;
@@ -652,7 +650,7 @@ export default function Home() {
                 <img src={compareOriginal ?? baseOriginal} alt="ภาพต้นฉบับ" />
                 <span>ก่อนปรับ</span>
               </div>
-              <div className="photoid-compare-pane">
+              <div className="photoid-compare-pane" style={{ background: bg }}>
                 <img src={shownSrc} alt="ภาพหลังปรับ" />
                 <span>หลังปรับ</span>
               </div>
