@@ -64,25 +64,22 @@ const aiOptions = [
     label: "ปรับความหนาผม",
     detail: "ลดหรือเพิ่มอย่างเป็นธรรมชาติ",
   },
-  { id: "hairstyle", label: "เปลี่ยนทรงผม", detail: "เลือกทรงผมสุภาพ 29 แบบ" },
+  {
+    id: "hairstyle",
+    label: "เปลี่ยนทรงผม",
+    detail: "เลือกทรงสุภาพด้วย AI",
+  },
+  {
+    id: "skin-light",
+    label: "ปรับแสงให้สมดุล",
+    detail: "คงผิวและใบหน้าเดิมทั้งหมด",
+  },
   {
     id: "hair-edge",
     label: "ทำขอบผมให้เนียน",
     detail: "เก็บขอบละเอียด ไม่แข็ง",
   },
 ];
-const hairstyleOptions = [
-  "original",
-  ...Array.from(
-    { length: 29 },
-    (_, index) => `hair-${String(index + 1).padStart(2, "0")}`,
-  ),
-].map((id) => ({
-  id,
-  label: id === "original" ? "ทรงเดิม" : `แบบ ${id.slice(-2)}`,
-  image: id === "original" ? "" : `/hairstyles/${id}.png`,
-  preview: id === "original" ? "" : `/hairstyle-previews/${id}.png`,
-}));
 
 function Control({
   label,
@@ -120,6 +117,7 @@ function Control({
 
 export default function Home() {
   const inputRef = useRef<HTMLInputElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const dragStart = useRef<{
     px: number;
     py: number;
@@ -127,29 +125,28 @@ export default function Home() {
     y: number;
   } | null>(null);
   const [original, setOriginal] = useState("/demo/original.png");
+  const [baseOriginal, setBaseOriginal] = useState("/demo/original.png");
+  const [aiBaseImage, setAiBaseImage] = useState<string | null>(null);
+  const [aiComposited, setAiComposited] = useState(false);
   const [cutout, setCutout] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
   const [aiProcessing, setAiProcessing] = useState(false);
+  const [backgroundProcessing, setBackgroundProcessing] = useState(false);
   const [aiSelected, setAiSelected] = useState<string[]>(
     aiOptions.map((o) => o.id),
   );
   const [hairVolume, setHairVolume] = useState<"ลด" | "คงเดิม" | "เพิ่ม">(
     "คงเดิม",
   );
-  const [skinStyle, setSkinStyle] = useState<"ธรรมชาติ" | "สดใส" | "สตูดิโอ">(
-    "ธรรมชาติ",
-  );
+  const [skinStyle, setSkinStyle] = useState<
+    "ธรรมชาติ" | "สดใส" | "สตูดิโอ"
+  >("ธรรมชาติ");
   const [skinStrength, setSkinStrength] = useState(15);
-  const [hairstyle, setHairstyle] = useState("original");
-  const appliedHairstyle = useRef("original");
-  const hairstyleBase = useRef<string | null>(null);
-  const outfitCutout = useRef<string | null>(null);
-  const uploadBase = useRef("/demo/original.png");
-  const outfitBase = useRef<string | null>(null);
-  const [aiComposited, setAiComposited] = useState(false);
+  const [hairstyle, setHairstyle] = useState("คงทรงเดิม");
   const [processMessage, setProcessMessage] = useState("");
   const [selected, setSelected] = useState("women-suit");
-  const [before, setBefore] = useState(false);
+  const [beforeState, setBefore] = useState(false);
+  const before = aiComposited || beforeState;
   const [zoom, setZoom] = useState(100);
   const [x, setX] = useState(0),
     [y, setY] = useState(0),
@@ -220,16 +217,12 @@ export default function Home() {
   function pickFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (f) {
-      const src = URL.createObjectURL(f);
-      setOriginal(src);
-      uploadBase.current = src;
-      outfitBase.current = null;
-      outfitCutout.current = null;
+      const url = URL.createObjectURL(f);
+      setBaseOriginal(url);
+      setOriginal(url);
+      setAiBaseImage(null);
       setAiComposited(false);
       setCutout(null);
-      setHairstyle("original");
-      appliedHairstyle.current = "original";
-      hairstyleBase.current = null;
       setProcessMessage("");
     }
   }
@@ -238,136 +231,152 @@ export default function Home() {
       v.includes(id) ? v.filter((x) => x !== id) : [...v, id],
     );
   }
-  async function createHairEditMask(sourceUrl: string): Promise<Blob | null> {
-    const loadImage = (src: string) =>
+  async function makeTransparentCutout(
+    src: string,
+    sourceBackground?: string,
+  ) {
+    const [{ FilesetResolver, ImageSegmenter }, img] = await Promise.all([
+      import("@mediapipe/tasks-vision"),
       new Promise<HTMLImageElement>((resolve, reject) => {
-        const image = new Image();
-        image.onload = () => resolve(image);
-        image.onerror = reject;
-        image.src = src;
-      });
-    try {
-      const [{ FilesetResolver, FaceDetector }, source] = await Promise.all([
-        import("@mediapipe/tasks-vision"),
-        loadImage(sourceUrl),
-      ]);
-      const vision = await FilesetResolver.forVisionTasks(
-        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm",
-      );
-      const detector = await FaceDetector.createFromOptions(vision, {
-        baseOptions: {
-          modelAssetPath:
-            "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/latest/blaze_face_short_range.tflite",
-        },
-        runningMode: "IMAGE",
-        minDetectionConfidence: 0.5,
-      });
-      const face = detector.detect(source).detections[0]?.boundingBox;
-      detector.close();
-      if (!face) return null;
-
-      const canvas = document.createElement("canvas");
-      canvas.width = source.naturalWidth;
-      canvas.height = source.naturalHeight;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return null;
-      // Opaque = protected. Transparent = the only region AI may edit.
-      ctx.fillStyle = "rgba(0,0,0,1)";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      const cx = face.originX + face.width / 2;
-      const left = face.originX;
-      const right = face.originX + face.width;
-      const top = face.originY;
-      ctx.globalCompositeOperation = "destination-out";
-
-      // Crown, fringe and outer head silhouette.
-      ctx.beginPath();
-      ctx.ellipse(
-        cx,
-        top + face.height * 0.02,
-        face.width * 0.92,
-        face.height * 0.88,
-        0,
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
-
-      // Left and right hair lengths. Keep the central face, neck and outfit
-      // protected while allowing short, long, tied and loose hairstyles.
-      ctx.fillRect(
-        left - face.width * 0.72,
-        top - face.height * 0.22,
-        face.width * 0.9,
-        face.height * 3.15,
-      );
-      ctx.fillRect(
-        right - face.width * 0.18,
-        top - face.height * 0.22,
-        face.width * 0.9,
-        face.height * 3.15,
-      );
-
-      // Re-protect the complete face and forehead interior. This prevents a
-      // reference model's face from being blended into the customer's face.
-      ctx.globalCompositeOperation = "source-over";
-      ctx.fillStyle = "rgba(0,0,0,1)";
-      ctx.beginPath();
-      ctx.ellipse(
-        cx,
-        top + face.height * 0.46,
-        face.width * 0.5,
-        face.height * 0.69,
-        0,
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
-      return await new Promise<Blob | null>((resolve) =>
-        canvas.toBlob(resolve, "image/png"),
-      );
-    } catch {
-      return null;
+        const el = new Image();
+        el.onload = () => resolve(el);
+        el.onerror = reject;
+        el.src = src;
+      }),
+    ]);
+    const vision = await FilesetResolver.forVisionTasks(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm",
+    );
+    const segmenter = await ImageSegmenter.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath:
+          "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite",
+      },
+      runningMode: "IMAGE",
+      outputConfidenceMasks: true,
+      outputCategoryMask: false,
+    });
+    const result = segmenter.segment(img);
+    const mask = result.confidenceMasks?.[0];
+    if (!mask) {
+      segmenter.close();
+      throw new Error("ไม่พบตัวบุคคล");
     }
+    const maskCanvas = document.createElement("canvas");
+    maskCanvas.width = mask.width;
+    maskCanvas.height = mask.height;
+    const maskCtx = maskCanvas.getContext("2d");
+    if (!maskCtx) {
+      mask.close();
+      segmenter.close();
+      throw new Error("เปิดพื้นที่ประมวลผลไม่ได้");
+    }
+    const matte = maskCtx.createImageData(mask.width, mask.height);
+    const values = mask.getAsFloat32Array();
+    for (let i = 0; i < values.length; i++) {
+      const normalized = Math.max(0, Math.min(1, (values[i] - 0.04) / 0.9));
+      const smooth = normalized * normalized * (3 - 2 * normalized);
+      matte.data[i * 4] = 255;
+      matte.data[i * 4 + 1] = 255;
+      matte.data[i * 4 + 2] = 255;
+      matte.data[i * 4 + 3] = Math.round(smooth * 255);
+    }
+    maskCtx.putImageData(matte, 0, 0);
+
+    const alphaCanvas = document.createElement("canvas");
+    alphaCanvas.width = img.naturalWidth;
+    alphaCanvas.height = img.naturalHeight;
+    const alphaCtx = alphaCanvas.getContext("2d");
+    if (!alphaCtx) {
+      mask.close();
+      segmenter.close();
+      throw new Error("เปิดพื้นที่ประมวลผลไม่ได้");
+    }
+    alphaCtx.imageSmoothingEnabled = true;
+    alphaCtx.imageSmoothingQuality = "high";
+    alphaCtx.filter = "blur(1.25px)";
+    alphaCtx.drawImage(
+      maskCanvas,
+      -2,
+      -2,
+      alphaCanvas.width + 4,
+      alphaCanvas.height + 4,
+    );
+
+    const canvas = document.createElement("canvas");
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      mask.close();
+      segmenter.close();
+      throw new Error("เปิดพื้นที่ประมวลผลไม่ได้");
+    }
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const alphaPixels = alphaCtx.getImageData(
+      0,
+      0,
+      alphaCanvas.width,
+      alphaCanvas.height,
+    ).data;
+    const bgMatch = sourceBackground?.match(
+      /^#([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i,
+    );
+    const sourceRgb = bgMatch
+      ? bgMatch.slice(1).map((part) => Number.parseInt(part, 16))
+      : null;
+    for (let i = 0; i < canvas.width * canvas.height; i++) {
+      const alpha = alphaPixels[i * 4 + 3] / 255;
+      if (sourceRgb && alpha > 0.08 && alpha < 0.98) {
+        for (let channel = 0; channel < 3; channel++) {
+          const foreground =
+            (pixels.data[i * 4 + channel] -
+              (1 - alpha) * sourceRgb[channel]) /
+            alpha;
+          pixels.data[i * 4 + channel] = Math.max(
+            0,
+            Math.min(255, Math.round(foreground)),
+          );
+        }
+      }
+      pixels.data[i * 4 + 3] = alphaPixels[i * 4 + 3];
+    }
+    ctx.putImageData(pixels, 0, 0);
+    mask.close();
+    segmenter.close();
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/png"),
+    );
+    if (!blob) throw new Error("สร้างภาพโปร่งใสไม่ได้");
+    return URL.createObjectURL(blob);
   }
-  async function aiEdit(hairstyleId = hairstyle) {
-    const hairOnly = hairstyleId !== "original";
-    if (hairOnly && appliedHairstyle.current === hairstyleId) {
-      setProcessMessage("ทรงผมนี้ถูกปรับแล้ว ไม่ประมวลผลซ้ำ");
-      return;
-    }
-    if (!hairOnly && !aiSelected.length) {
+  async function aiEdit() {
+    if (!aiSelected.length) {
       setProcessMessage("กรุณาเลือกอย่างน้อย 1 รายการ");
       return;
     }
     setAiProcessing(true);
     setProcessMessage("AI กำลังปรับภาพจริง อาจใช้เวลาประมาณ 30–90 วินาที…");
     try {
-      const selectedHairstyle = hairstyleOptions.find(
-        (item) => item.id === hairstyleId,
-      );
-      const sourceUrl = hairOnly
-        ? outfitBase.current || hairstyleBase.current || original
-        : original;
-      const source = await fetch(sourceUrl);
-      const blob = await source.blob();
+      const [source, outfitSource] = await Promise.all([
+        fetch(baseOriginal),
+        fetch(outfit.image),
+      ]);
+      const [blob, outfitBlob] = await Promise.all([
+        source.blob(),
+        outfitSource.blob(),
+      ]);
       const form = new FormData();
       form.append("image", blob, "portrait.png");
+      form.append("outfit", outfitBlob, "outfit-reference.png");
+      form.append("outfitLabel", `${outfit.label} (${outfit.sub})`);
+      form.append("background", bg);
       form.append("operations", JSON.stringify(aiSelected));
       form.append("hairVolume", hairVolume);
       form.append("skinStyle", skinStyle);
       form.append("skinStrength", String(skinStrength));
-      form.append("background", bg);
-      if (hairOnly && selectedHairstyle?.preview) {
-        // Send the same clear, full-model hairstyle reference shown in the UI.
-        // The old white-face cutout was ambiguous to the image model and often
-        // resulted in no hairstyle change at all.
-        const ref = await fetch(selectedHairstyle.preview);
-        form.append("hairstyleRef", await ref.blob(), `${hairstyleId}.png`);
-        form.append("hairstyle", selectedHairstyle.label);
-        form.append("operations", JSON.stringify(["hairstyle"]));
-        form.append("editMode", "hairstyle-only");
-      }
+      form.append("hairstyle", hairstyle);
       const response = await fetch("/api/ai-edit", {
         method: "POST",
         body: form,
@@ -378,25 +387,12 @@ export default function Home() {
       };
       if (!response.ok || !data.image)
         throw new Error(data.error || "AI ปรับภาพไม่สำเร็จ");
-      const finalImage = data.image;
-      setOriginal(finalImage);
-      setX(0);
-      setY(0);
-      setZoom(100);
-      if (hairOnly) {
-        appliedHairstyle.current = hairstyleId;
-        // Guarantee that the uploaded wall/background never comes back in the
-        // preview. The downloaded JPEG is flattened onto the selected color.
-        await removeBackground(finalImage);
-      } else {
-        setCutout(null);
-      }
+      setOriginal(data.image);
+      setAiBaseImage(data.image);
+      setAiComposited(true);
+      setCutout(null);
       setBefore(false);
-      setProcessMessage(
-        hairOnly
-          ? "เปลี่ยนทรงผมและใช้สีพื้นหลังที่เลือกเรียบร้อยแล้ว"
-          : "ปรับภาพเรียบร้อยแล้ว",
-      );
+      setProcessMessage("AI ปรับภาพแบบ V3 สำเร็จแล้ว");
     } catch (e) {
       setProcessMessage(
         e instanceof Error ? e.message : "AI ปรับภาพไม่สำเร็จ กรุณาลองอีกครั้ง",
@@ -405,30 +401,21 @@ export default function Home() {
       setAiProcessing(false);
     }
   }
-  async function confirmOutfit() {
-    if (aiProcessing) return;
-    setAiProcessing(true);
-    setProcessMessage("กำลังเปลี่ยนชุดและปรับภาพให้สมดุล…");
+  async function changeBackground(color: string) {
+    if (!aiComposited || !aiBaseImage) {
+      setBg(color);
+      return;
+    }
+    if (backgroundProcessing || color === bg) return;
+    setBackgroundProcessing(true);
+    setProcessMessage("AI กำลังเปลี่ยนเฉพาะพื้นหลังและเก็บขอบภาพ…");
     try {
-      const [source, outfitSource] = await Promise.all([
-        fetch(uploadBase.current),
-        fetch(outfit.image),
-      ]);
+      const source = await fetch(aiBaseImage);
+      const blob = await source.blob();
       const form = new FormData();
-      form.append("image", await source.blob(), "portrait.png");
-      form.append("outfit", await outfitSource.blob(), "outfit-reference.png");
-      form.append("outfitLabel", `${outfit.label} (${outfit.sub})`);
-      form.append(
-        "operations",
-        JSON.stringify([
-          "outfit",
-          ...aiSelected.filter((id) => id !== "hairstyle"),
-        ]),
-      );
-      form.append("hairVolume", hairVolume);
-      form.append("skinStyle", skinStyle);
-      form.append("skinStrength", String(skinStrength));
-      const response = await fetch("/api/ai-edit", {
+      form.append("image", blob, "v3-portrait.png");
+      form.append("background", color);
+      const response = await fetch("/api/change-background", {
         method: "POST",
         body: form,
       });
@@ -437,120 +424,28 @@ export default function Home() {
         error?: string;
       };
       if (!response.ok || !data.image)
-        throw new Error(data.error || "เปลี่ยนชุดไม่สำเร็จ");
+        throw new Error(data.error || "AI เปลี่ยนพื้นหลังไม่สำเร็จ");
       setOriginal(data.image);
-      setX(0);
-      setY(0);
-      setZoom(100);
-      outfitBase.current = data.image;
-      hairstyleBase.current = data.image;
-      setHairstyle("original");
-      appliedHairstyle.current = "original";
-      setAiComposited(true);
-      const separated = await removeBackground(data.image);
-      outfitCutout.current = separated;
-      setProcessMessage(
-        separated
-          ? "เปลี่ยนชุดและแยกพื้นหลังเรียบร้อยแล้ว"
-          : "เปลี่ยนชุดสำเร็จ แต่ยังแยกพื้นหลังไม่สำเร็จ กรุณาลองอีกครั้ง",
-      );
+      setCutout(null);
+      setBg(color);
+      setProcessMessage("AI เปลี่ยนพื้นหลังและเก็บขอบเรียบร้อยแล้ว");
     } catch (e) {
       setProcessMessage(
-        e instanceof Error ? e.message : "เปลี่ยนชุดไม่สำเร็จ กรุณาลองอีกครั้ง",
+        e instanceof Error
+          ? e.message
+          : "AI เปลี่ยนพื้นหลังไม่สำเร็จ กรุณาลองอีกครั้ง",
       );
     } finally {
-      setAiProcessing(false);
+      setBackgroundProcessing(false);
     }
   }
-  async function selectHairstyle(id: string) {
-    if (aiProcessing) return;
-    if (id !== "original" && !aiComposited) {
-      setProcessMessage("กรุณายืนยันเปลี่ยนชุดก่อนเลือกทรงผม");
-      return;
-    }
-    setHairstyle(id);
-    if (id === "original") {
-      if (outfitBase.current) {
-        setOriginal(outfitBase.current);
-        setCutout(outfitCutout.current);
-        setProcessMessage("กลับมาใช้ทรงผมเดิมแล้ว");
-      }
-      return;
-    }
-    if (!hairstyleBase.current) hairstyleBase.current = original;
-    await aiEdit(id);
-  }
-  async function removeBackground(sourceImage = original) {
+  async function removeBackground() {
     setProcessing(true);
-    setProcessMessage("กำลังตัดพื้นหลังโดยคงภาพบุคคลเดิม…");
+    setProcessMessage("กำลังเตรียมระบบตัดพื้นหลัง…");
     try {
-      const [{ FilesetResolver, ImageSegmenter }, img] = await Promise.all([
-        import("@mediapipe/tasks-vision"),
-        new Promise<HTMLImageElement>((resolve, reject) => {
-          const el = new Image();
-          el.onload = () => resolve(el);
-          el.onerror = reject;
-          el.src = sourceImage;
-        }),
-      ]);
-      const vision = await FilesetResolver.forVisionTasks(
-        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm",
-      );
-      const segmenter = await ImageSegmenter.createFromOptions(vision, {
-        baseOptions: {
-          modelAssetPath:
-            "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite",
-        },
-        runningMode: "IMAGE",
-        outputConfidenceMasks: true,
-        outputCategoryMask: false,
-      });
-      const result = segmenter.segment(img);
-      const mask = result.confidenceMasks?.[0];
-      if (!mask) throw new Error("ไม่พบตัวบุคคล");
-
-      // สร้างหน้ากากที่ความละเอียดต้นทางก่อน แล้วค่อยขยายแบบ smoothing
-      // เพื่อไม่ให้ภาพบุคคลถูกลดเหลือเท่าความละเอียดของโมเดล segmentation
-      const smallMask = document.createElement("canvas");
-      smallMask.width = mask.width;
-      smallMask.height = mask.height;
-      const smallCtx = smallMask.getContext("2d");
-      if (!smallCtx) throw new Error("สร้างหน้ากากไม่ได้");
-      const maskPixels = smallCtx.createImageData(mask.width, mask.height);
-      const values = mask.getAsFloat32Array();
-      for (let i = 0; i < values.length; i++) {
-        const t = Math.max(0, Math.min(1, (values[i] - 0.18) / 0.68));
-        const alpha = t * t * (3 - 2 * t);
-        maskPixels.data[i * 4] = 255;
-        maskPixels.data[i * 4 + 1] = 255;
-        maskPixels.data[i * 4 + 2] = 255;
-        maskPixels.data[i * 4 + 3] = Math.round(alpha * 255);
-      }
-      smallCtx.putImageData(maskPixels, 0, 0);
-
-      const canvas = document.createElement("canvas");
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) throw new Error("เปิดพื้นที่ประมวลผลไม่ได้");
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      ctx.globalCompositeOperation = "destination-in";
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
-      ctx.filter = "blur(0.65px)";
-      ctx.drawImage(smallMask, 0, 0, canvas.width, canvas.height);
-      ctx.filter = "none";
-      ctx.globalCompositeOperation = "source-over";
-      mask.close();
-      segmenter.close();
-      const blob = await new Promise<Blob | null>((resolve) =>
-        canvas.toBlob(resolve, "image/png"),
-      );
-      if (!blob) throw new Error("สร้างภาพโปร่งใสไม่ได้");
-      const cutoutUrl = URL.createObjectURL(blob);
-      setCutout(cutoutUrl);
-      setProcessMessage("ตัดพื้นหลังเรียบร้อย ใบหน้าและภาพบุคคลคงเดิม");
-      return cutoutUrl;
+      setProcessMessage("กำลังแยกบุคคลและเก็บขอบเส้นผม…");
+      setCutout(await makeTransparentCutout(original));
+      setProcessMessage("ตัดพื้นหลังเรียบร้อย");
     } catch (e) {
       setProcessMessage(
         e instanceof Error
@@ -560,7 +455,6 @@ export default function Home() {
     } finally {
       setProcessing(false);
     }
-    return null;
   }
   async function download() {
     const load = (src: string) =>
@@ -582,14 +476,21 @@ export default function Home() {
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, 900, 1200);
     const scale =
-      Math.min(900 / person.width, 1200 / person.height) * (zoom / 100);
+      (aiComposited
+        ? Math.max(900 / person.width, 1200 / person.height)
+        : Math.min(900 / person.width, 1200 / person.height)) *
+      (zoom / 100);
     const pw = person.width * scale,
       ph = person.height * scale;
+    const previewWidth = stageRef.current?.clientWidth || 450;
+    const previewHeight = stageRef.current?.clientHeight || 600;
+    const exportX = x * (900 / previewWidth);
+    const exportY = y * (1200 / previewHeight);
     ctx.filter = `brightness(${100 + skin}%)`;
     ctx.drawImage(
       person,
-      (900 - pw) / 2 + x * 2,
-      (1200 - ph) / 2 + y * 2,
+      (900 - pw) / 2 + exportX,
+      (1200 - ph) / 2 + exportY,
       pw,
       ph,
     );
@@ -613,10 +514,7 @@ export default function Home() {
             <Camera />
           </div>
           <div>
-            <div className="brand-title">
-              <strong>รูปพร้อมใช้</strong>
-              <span className="version-badge">V3.4</span>
-            </div>
+            <strong>รูปพร้อมใช้</strong>
             <small>รูปสวย ถูกต้อง พร้อมใช้ทุกโอกาส</small>
           </div>
         </div>
@@ -710,7 +608,7 @@ export default function Home() {
             <div className="before-label">ก่อนปรับ (Before)</div>
             <button
               className="remove-bg"
-              onClick={() => void removeBackground()}
+              onClick={removeBackground}
               disabled={processing}
             >
               {processing ? <LoaderCircle className="spin" /> : <Scissors />}
@@ -739,6 +637,7 @@ export default function Home() {
           </aside>
           <section className="preview-panel card">
             <div
+              ref={stageRef}
               className="photo-stage"
               style={{ background: bg }}
               onPointerDown={(e) => {
@@ -758,7 +657,7 @@ export default function Home() {
               }}
             >
               <img
-                className="person-layer"
+                className={`person-layer ${aiComposited ? "ai-result" : ""}`}
                 src={shownSrc}
                 alt="ภาพลูกค้า"
                 style={{
@@ -766,7 +665,14 @@ export default function Home() {
                   filter: `brightness(${100 + skin}%)`,
                 }}
               />
-              {!before && !aiComposited && (
+              {backgroundProcessing && (
+                <div className="background-ai-loading">
+                  <LoaderCircle className="spin" />
+                  <b>AI กำลังเปลี่ยนพื้นหลังทั้งภาพ…</b>
+                  <small>กรุณารอประมาณ 30–90 วินาที</small>
+                </div>
+              )}
+              {!before && (
                 <img
                   className="template-layer"
                   src={outfit.image}
@@ -776,17 +682,7 @@ export default function Home() {
                   }}
                 />
               )}
-              {aiProcessing && (
-                <div className="ai-loading">
-                  <LoaderCircle className="spin" />
-                  <b>{processMessage || "กำลังประมวลผลภาพ…"}</b>
-                  <small>กรุณารอประมาณ 30–90 วินาที</small>
-                  <span>
-                    <i />
-                  </span>
-                </div>
-              )}
-              {!before && !aiComposited && (
+              {!before && (
                 <>
                   <div className="crop-box" />
                   <div className="guide vertical" />
@@ -861,17 +757,6 @@ export default function Home() {
               </span>
               <b>›</b>
             </button>
-            <button
-              className="confirm-outfit"
-              onClick={confirmOutfit}
-              disabled={aiProcessing}
-            >
-              {aiProcessing ? <LoaderCircle className="spin" /> : <Check />}
-              <span>
-                <b>{aiProcessing ? "กำลังเปลี่ยนชุด…" : "ยืนยันเปลี่ยนชุด"}</b>
-                <small>ใช้ชุดที่แสดงอยู่ในพรีวิว</small>
-              </span>
-            </button>
             <section className="ai-editor">
               <div className="ai-editor-title">
                 <b>
@@ -914,25 +799,26 @@ export default function Home() {
               )}
               {aiSelected.includes("hairstyle") && (
                 <div className="hairstyle-control">
-                  <b>เลือกทรงผม</b>
+                  <div className="hairstyle-heading">
+                    <b>เลือกทรงผม</b>
+                    <small>AI จะรักษาใบหน้าและแนวไรผมเดิม</small>
+                  </div>
                   <div className="hairstyle-options">
-                    {hairstyleOptions.map((style) => (
+                    {[
+                      "คงทรงเดิม",
+                      "รวบต่ำสุภาพ",
+                      "ผมตรงประบ่า",
+                      "บ๊อบสุภาพ",
+                      "รองทรงสุภาพ",
+                      "แสกข้างสุภาพ",
+                    ].map((style) => (
                       <button
                         type="button"
-                        key={style.id}
-                        className={hairstyle === style.id ? "active" : ""}
-                        onClick={() => selectHairstyle(style.id)}
-                        disabled={aiProcessing}
+                        key={style}
+                        className={hairstyle === style ? "active" : ""}
+                        onClick={() => setHairstyle(style)}
                       >
-                        {style.preview ? (
-                          <img
-                            src={style.preview}
-                            alt={`ตัวอย่างทรงผม ${style.label}`}
-                          />
-                        ) : (
-                          <UserRound />
-                        )}
-                        <small>{style.label}</small>
+                        {style}
                       </button>
                     ))}
                   </div>
@@ -943,21 +829,23 @@ export default function Home() {
                   <div className="skin-style-title">
                     <span>
                       <b>แสงและผิวธรรมชาติ</b>
-                      <small>รักษารูขุมขนและใบหน้าเดิม</small>
+                      <small>รักษารูขุมขนและหน้าเดิม</small>
                     </span>
                     <output>{skinStrength}%</output>
                   </div>
                   <div className="skin-style-presets">
-                    {(["ธรรมชาติ", "สดใส", "สตูดิโอ"] as const).map((style) => (
-                      <button
-                        type="button"
-                        key={style}
-                        className={skinStyle === style ? "active" : ""}
-                        onClick={() => setSkinStyle(style)}
-                      >
-                        {style}
-                      </button>
-                    ))}
+                    {(["ธรรมชาติ", "สดใส", "สตูดิโอ"] as const).map(
+                      (style) => (
+                        <button
+                          type="button"
+                          key={style}
+                          className={skinStyle === style ? "active" : ""}
+                          onClick={() => setSkinStyle(style)}
+                        >
+                          {style}
+                        </button>
+                      ),
+                    )}
                   </div>
                   <label>
                     <span>ระดับการปรับ</span>
@@ -971,11 +859,14 @@ export default function Home() {
                       onChange={(e) => setSkinStrength(Number(e.target.value))}
                     />
                   </label>
+                  <small className="skin-apply-hint">
+                    ตั้งค่าแล้วกด “ปรับด้วย AI” ด้านล่างเพื่อใช้กับภาพ
+                  </small>
                 </div>
               )}
               <button
                 className="run-ai"
-                onClick={() => aiEdit()}
+                onClick={aiEdit}
                 disabled={aiProcessing}
               >
                 {aiProcessing ? (
@@ -1043,7 +934,8 @@ export default function Home() {
                     aria-label={`สีพื้นหลัง ${c}`}
                     className={bg === c ? "selected" : ""}
                     key={c}
-                    onClick={() => setBg(c)}
+                    onClick={() => changeBackground(c)}
+                    disabled={backgroundProcessing}
                     style={{ background: c }}
                   >
                     {bg === c && <Check />}
@@ -1069,17 +961,7 @@ export default function Home() {
               {outfits.map((o) => (
                 <button
                   key={o.id}
-                  onClick={() => {
-                    setSelected(o.id);
-                    setOriginal(uploadBase.current);
-                    setCutout(null);
-                    setAiComposited(false);
-                    setHairstyle("original");
-                    appliedHairstyle.current = "original";
-                    outfitBase.current = null;
-                    outfitCutout.current = null;
-                    hairstyleBase.current = null;
-                  }}
+                  onClick={() => setSelected(o.id)}
                   className={`outfit ${selected === o.id ? "selected" : ""} ${o.tone}`}
                 >
                   <img src={o.image} alt={o.label} />

@@ -18,6 +18,34 @@
   object-fit: contain !important;
 }
 
+.photo-stage > .person-layer.ai-result {
+  object-fit: cover !important;
+}
+
+.background-ai-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: white;
+  background: rgb(7 31 63 / 72%);
+  text-align: center;
+  pointer-events: all;
+}
+
+.background-ai-loading svg {
+  width: 34px;
+  height: 34px;
+}
+
+.background-ai-loading small {
+  color: #dcecff;
+}
+
 @media (max-width: 900px) {
   .preview-panel {
     min-height: 0;

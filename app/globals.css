@@ -55,21 +55,6 @@ body {
   font-size: 24px;
   line-height: 1;
 }
-.brand-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.version-badge {
-  padding: 2px 6px;
-  border: 1px solid #77b7ff;
-  border-radius: 999px;
-  background: #247be2;
-  color: white;
-  font-size: 9px;
-  font-weight: 800;
-  line-height: 1.2;
-}
 .brand small {
   display: block;
   font-size: 10px;
@@ -305,11 +290,7 @@ body {
 }
 .photo-stage {
   position: relative;
-  flex: 1 1 auto;
-  aspect-ratio: 3 / 4;
-  width: auto;
-  max-width: 100%;
-  align-self: center;
+  flex: 1;
   min-height: 0;
   overflow: hidden;
   border-radius: 7px;
@@ -813,7 +794,7 @@ body {
   position: absolute;
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
   z-index: 1;
 }
 .photo-stage > .template-layer {
@@ -981,6 +962,113 @@ body {
   color: white;
   border-color: #176fe2;
 }
+.skin-style-control {
+  margin-top: 9px;
+  padding: 9px;
+  border: 1px solid #cfe0f5;
+  border-radius: 8px;
+  background: #f7fbff;
+}
+.hairstyle-control {
+  margin-top: 9px;
+  padding: 9px;
+  border: 1px solid #cfe0f5;
+  border-radius: 8px;
+  background: #f7fbff;
+}
+.hairstyle-heading {
+  display: grid;
+  margin-bottom: 7px;
+}
+.hairstyle-heading b {
+  font-size: 10px;
+}
+.hairstyle-heading small {
+  margin-top: 2px;
+  color: #70839a;
+  font-size: 8px;
+}
+.hairstyle-options {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+}
+.hairstyle-options button {
+  min-height: 29px;
+  padding: 4px;
+  border: 1px solid #d2dfef;
+  border-radius: 6px;
+  background: white;
+  color: #52667f;
+  font-size: 8px;
+}
+.hairstyle-options button.active {
+  border-color: #176fe2;
+  background: #e9f3ff;
+  color: #0b62cb;
+  font-weight: 800;
+}
+.skin-style-title,
+.skin-style-control label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.skin-style-title span {
+  display: grid;
+  margin-right: auto;
+}
+.skin-style-title b,
+.skin-style-control label span {
+  font-size: 10px;
+}
+.skin-style-title small {
+  margin-top: 2px;
+  color: #70839a;
+  font-size: 8px;
+}
+.skin-style-title output {
+  min-width: 38px;
+  padding: 3px 5px;
+  border-radius: 5px;
+  background: white;
+  color: #176fe2;
+  text-align: center;
+  font-size: 9px;
+  font-weight: 800;
+}
+.skin-style-presets {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+  margin: 8px 0;
+}
+.skin-style-presets button {
+  padding: 5px 4px;
+  border: 1px solid #d2dfef;
+  border-radius: 6px;
+  background: white;
+  color: #52667f;
+  font-size: 9px;
+}
+.skin-style-presets button.active {
+  border-color: #176fe2;
+  background: #e9f3ff;
+  color: #0b62cb;
+  font-weight: 800;
+}
+.skin-style-control label input {
+  min-width: 0;
+  flex: 1;
+  accent-color: #176fe2;
+}
+.skin-apply-hint {
+  display: block;
+  margin-top: 5px;
+  color: #627892;
+  font-size: 8px;
+  text-align: center;
+}
 .run-ai {
   width: 100%;
   height: 42px;
@@ -1012,188 +1100,6 @@ body {
   font-weight: 700;
   color: #4b6078;
   padding: 5px 0;
-}
-.hairstyle-control {
-  margin-top: 10px;
-  padding-top: 9px;
-  border-top: 1px solid #dce8f5;
-}
-.hairstyle-control > b {
-  font-size: 10px;
-}
-.hairstyle-options {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
-  max-height: 220px;
-  overflow: auto;
-  margin-top: 7px;
-  padding: 2px;
-}
-.hairstyle-options button {
-  border: 1px solid #d7e2ef;
-  border-radius: 7px;
-  background: white;
-  padding: 3px;
-  display: grid;
-  place-items: center;
-  gap: 2px;
-  color: #52667d;
-}
-.hairstyle-options button.active {
-  border-color: #1776ec;
-  box-shadow: 0 0 0 1px #1776ec;
-  background: #eff6ff;
-}
-.hairstyle-options img {
-  width: 100%;
-  aspect-ratio: 1;
-  object-fit: cover;
-  border-radius: 4px;
-}
-.hairstyle-options svg {
-  width: 28px;
-  height: 42px;
-}
-.hairstyle-options small {
-  font-size: 8px;
-}
-.hairstyle-options button:disabled {
-  opacity: 0.65;
-}
-.confirm-outfit {
-  width: 100%;
-  margin-top: 10px;
-  min-height: 48px;
-  border: 0;
-  border-radius: 9px;
-  background: linear-gradient(90deg, #0d67d8, #258bf4);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 9px;
-}
-.confirm-outfit svg {
-  width: 19px;
-}
-.confirm-outfit span {
-  display: grid;
-  text-align: left;
-}
-.confirm-outfit b {
-  font-size: 12px;
-}
-.confirm-outfit small {
-  font-size: 8px;
-  opacity: 0.82;
-}
-.confirm-outfit:disabled {
-  opacity: 0.65;
-}
-.skin-style-control {
-  margin-top: 10px;
-  padding: 10px;
-  border: 1px solid #d5e5f8;
-  border-radius: 9px;
-  background: #f7fbff;
-}
-.skin-style-title {
-  display: flex;
-  justify-content: space-between;
-  align-items: start;
-}
-.skin-style-title span {
-  display: grid;
-}
-.skin-style-title b {
-  font-size: 10px;
-}
-.skin-style-title small {
-  margin-top: 2px;
-  color: #75879b;
-  font-size: 8px;
-}
-.skin-style-title output {
-  color: #1267d6;
-  font-size: 10px;
-  font-weight: 800;
-}
-.skin-style-presets {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 5px;
-  margin-top: 8px;
-}
-.skin-style-presets button {
-  border: 1px solid #d4e0ee;
-  border-radius: 6px;
-  background: white;
-  padding: 5px;
-  font-size: 9px;
-}
-.skin-style-presets button.active {
-  border-color: #1776ec;
-  color: #0862ca;
-  background: #edf6ff;
-}
-.skin-style-control > label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-  font-size: 9px;
-  font-weight: 700;
-}
-.skin-style-control input {
-  min-width: 0;
-  flex: 1;
-  accent-color: #1776ec;
-}
-.ai-loading {
-  position: absolute;
-  inset: 0;
-  z-index: 20;
-  background: #102d4fca;
-  color: white;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  text-align: center;
-  padding: 20px;
-}
-.ai-loading svg {
-  width: 35px;
-  height: 35px;
-}
-.ai-loading b {
-  font-size: 13px;
-}
-.ai-loading small {
-  font-size: 9px;
-  opacity: 0.85;
-}
-.ai-loading > span {
-  width: min(230px, 70%);
-  height: 5px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: #ffffff38;
-}
-.ai-loading i {
-  display: block;
-  width: 45%;
-  height: 100%;
-  border-radius: inherit;
-  background: #69b4ff;
-  animation: loading-slide 1.3s ease-in-out infinite alternate;
-}
-@keyframes loading-slide {
-  to {
-    transform: translateX(125%);
-  }
 }
 @media (max-width: 560px) {
   .preview-panel {
