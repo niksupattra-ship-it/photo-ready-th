@@ -25,34 +25,20 @@ import {
 } from "lucide-react";
 
 const outfits = [
-  {
-    id: "women-suit",
-    label: "สูทหญิง",
-    sub: "สมัครงาน",
-    image: "/templates/women-suit.png",
-    tone: "suit",
-  },
-  {
-    id: "men-suit",
-    label: "สูทชาย",
-    sub: "สมัครงาน",
-    image: "/templates/men-suit.png",
-    tone: "suit",
-  },
-  {
-    id: "women-student",
-    label: "นักศึกษาหญิง",
-    sub: "มหาวิทยาลัย",
-    image: "/templates/women-student.png",
-    tone: "student",
-  },
-  {
-    id: "men-student",
-    label: "นักศึกษาชาย",
-    sub: "มหาวิทยาลัย",
-    image: "/templates/men-student.png",
-    tone: "student",
-  },
+  { id: "job-women-polite", label: "สูทหญิงสุภาพ", sub: "สมัครงาน", category: "สมัครงาน", image: "/templates/job-suit-women-real.png", tone: "suit" },
+  { id: "job-women-open", label: "สูทหญิงคอเปิด", sub: "สมัครงาน", category: "สมัครงาน", image: "/templates/job-suit-open-01.png", tone: "suit" },
+  { id: "job-women-wide", label: "สูทหญิงปกกว้าง", sub: "สมัครงาน", category: "สมัครงาน", image: "/templates/job-suit-open-02.png", tone: "suit" },
+  { id: "job-women-mandarin", label: "สูทหญิงคอจีน", sub: "สมัครงาน", category: "สมัครงาน", image: "/templates/job-suit-tie.png", tone: "suit" },
+  { id: "job-men-polite", label: "สูทชายสุภาพ", sub: "สมัครงาน", category: "สมัครงาน", image: "/templates/job-suit-men-real.png", tone: "suit" },
+  { id: "job-men-open", label: "สูทชายคอเปิด", sub: "สมัครงาน", category: "สมัครงาน", image: "/templates/job-navy-suit-tie-men.png", tone: "suit" },
+  { id: "job-white-women", label: "เสื้อขาวหญิง", sub: "สมัครงาน", category: "สมัครงาน", image: "/templates/job-white-shirt-women.png", tone: "student" },
+  { id: "job-white-men", label: "เสื้อขาวชาย", sub: "สมัครงาน", category: "สมัครงาน", image: "/templates/job-white-shirt-men.png", tone: "student" },
+  { id: "women-suit", label: "สูทหญิง", sub: "ข้าราชการ", category: "ข้าราชการ", image: "/templates/women-suit.png", tone: "suit" },
+  { id: "men-suit", label: "สูทชาย", sub: "ข้าราชการ", category: "ข้าราชการ", image: "/templates/men-suit.png", tone: "suit" },
+  { id: "women-student", label: "นักเรียนหญิง", sub: "นักเรียน", category: "นักเรียน", image: "/templates/women-student.png", tone: "student" },
+  { id: "men-student", label: "นักเรียนชาย", sub: "นักเรียน", category: "นักเรียน", image: "/templates/men-student.png", tone: "student" },
+  { id: "women-university", label: "นักศึกษาหญิง", sub: "นักศึกษา", category: "นักศึกษา", image: "/templates/women-university.png", tone: "student" },
+  { id: "men-university", label: "นักศึกษาชาย", sub: "นักศึกษา", category: "นักศึกษา", image: "/templates/men-university.png", tone: "student" },
 ];
 const steps = ["อัปโหลดรูป", "เลือกประเภท", "เลือกชุด", "ปรับภาพ", "ดาวน์โหลด"];
 const aiOptions = [
@@ -156,7 +142,8 @@ export default function Home() {
   const [skinStrength, setSkinStrength] = useState(15);
   const [hairstyle, setHairstyle] = useState("original");
   const [processMessage, setProcessMessage] = useState("");
-  const [selected, setSelected] = useState("women-suit");
+  const [selected, setSelected] = useState("job-women-polite");
+  const [outfitCategory, setOutfitCategory] = useState("สมัครงาน");
   const [beforeState, setBefore] = useState(false);
   const before = aiComposited || beforeState;
   const [zoom, setZoom] = useState(100);
@@ -169,6 +156,7 @@ export default function Home() {
   const [bg, setBg] = useState("#1682ee");
   const [saved, setSaved] = useState(false);
   const outfit = outfits.find((o) => o.id === selected) ?? outfits[0];
+  const visibleOutfits = outfits.filter((o) => o.category === outfitCategory);
   const shownSrc = cutout ?? original;
   function reset() {
     setX(0);
@@ -527,495 +515,106 @@ export default function Home() {
   }
 
   return (
-    <main className="app-shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <div className="brand-icon">
-            <Camera />
-          </div>
-          <div>
-            <strong>รูปพร้อมใช้</strong>
-            <small>รูปสวย ถูกต้อง พร้อมใช้ทุกโอกาส</small>
-          </div>
+    <main className="photoid-shell">
+      <header className="photoid-topbar">
+        <div className="photoid-brand">
+          <span className="photoid-logo">ID</span>
+          <div><strong>PhotoID Studio TH</strong><small>รูปพร้อมใช้</small></div>
         </div>
-        <nav>
-          <button className="nav-active">
-            <ImageIcon />
-            สร้างรูปถ่าย
-          </button>
-          <button>
-            <Clock3 />
-            ประวัติการใช้งาน
-          </button>
-          <button>
-            <Grid2X2 />
-            เทมเพลต
-          </button>
-          <button>
-            <Settings />
-            ตั้งค่า
-          </button>
-          <button>
-            <CircleHelp />
-            ช่วยเหลือ
-          </button>
-        </nav>
-        <div className="premium">
-          <div className="crown">♛</div>
-          <b>
-            อัปเกรดเป็น
-            <br />
-            <em>Premium</em>
-          </b>
-          <ul>
-            <li>ปลดล็อกทุกชุด</li>
-            <li>ความละเอียดสูง</li>
-            <li>ไม่มีลายน้ำ</li>
-          </ul>
-          <button>อัปเกรดเลย</button>
-        </div>
-      </aside>
-      <section className="workspace">
-        <header className="topbar">
-          <div className="stepper">
-            {steps.map((s, i) => (
-              <div
-                className={`step ${i < 3 ? "done" : i === 3 ? "current" : ""}`}
-                key={s}
-              >
-                <span>{i < 3 ? <Check /> : i + 1}</span>
-                <b>{s}</b>
-                {i < 4 && <i />}
-              </div>
-            ))}
+        <span className="photoid-status"><Check /> รักษาใบหน้าจริง</span>
+      </header>
+
+      <div className="photoid-page">
+        <section className="photoid-preview-card">
+          <div className="photoid-card-heading"><h2>ภาพตัวอย่าง</h2><small>มาตรฐานรูปสมัครงาน 3:4</small></div>
+          <div ref={stageRef} className="photoid-stage" style={{ background: bg }}
+            onPointerDown={(e) => { dragStart.current = { px: e.clientX, py: e.clientY, x, y }; e.currentTarget.setPointerCapture(e.pointerId); }}
+            onPointerMove={(e) => { if (!dragStart.current) return; setX(dragStart.current.x + e.clientX - dragStart.current.px); setY(dragStart.current.y + e.clientY - dragStart.current.py); }}
+            onPointerUp={() => { dragStart.current = null; }} onPointerCancel={() => { dragStart.current = null; }}>
+            <img className={`photoid-person ${aiComposited ? "ai-result" : ""}`} src={shownSrc} alt="ภาพลูกค้า"
+              style={{ transform: `translate(${x}px, ${y}px) scale(${zoom / 100})`, filter: `brightness(${100 + skin}%)` }} />
+            {!before && !aiComposited && <img className="photoid-outfit-layer" src={outfit.image} alt={outfit.label}
+              style={{ transform: `translateY(${hair * 2}px) scale(${1 + neck / 100})` }} />}
+            {backgroundProcessing && <div className="photoid-loading"><LoaderCircle className="spin" /><b>AI กำลังเปลี่ยนพื้นหลัง…</b><small>กรุณารอสักครู่</small></div>}
           </div>
-          <div className="actions">
-            <button
-              onClick={() => {
-                setSaved(true);
-                setTimeout(() => setSaved(false), 1800);
-              }}
-            >
-              <Save />
-              {saved ? "บันทึกแล้ว" : "บันทึกงาน"}
-            </button>
-            <button className="primary" onClick={download}>
-              <Download />
-              ดาวน์โหลด
-            </button>
+          <div className="photoid-preview-actions">
+            <button onClick={() => setZoom(Math.max(70, zoom - 5))}><ZoomOut /></button><b>{zoom}%</b>
+            <button onClick={() => setZoom(Math.min(130, zoom + 5))}><ZoomIn /></button>
+            <button onClick={reset}><RotateCcw /> รีเซ็ต</button>
+            <button onClick={() => setBefore(!before)}><ImageIcon /> {before ? "ดูหลังปรับ" : "ดูต้นฉบับ"}</button>
           </div>
-        </header>
-        <div className="editor-grid">
-          <aside className="source-panel card">
-            <h2>รูปต้นฉบับ</h2>
-            <button
-              className="source-photo"
-              onClick={() => inputRef.current?.click()}
-            >
-              <img src={original} alt="รูปต้นฉบับ" />
-              <span>
-                <Upload />
-                เปลี่ยนรูป
-              </span>
-            </button>
-            <input
-              ref={inputRef}
-              type="file"
-              accept="image/*"
-              onChange={pickFile}
-              hidden
-            />
-            <div className="before-label">ก่อนปรับ (Before)</div>
-            <button
-              className="remove-bg"
-              onClick={removeBackground}
-              disabled={processing}
-            >
-              {processing ? <LoaderCircle className="spin" /> : <Scissors />}
-              <span>
-                <b>
-                  {processing ? "กำลังตัดพื้นหลัง" : "ตัดพื้นหลังอัตโนมัติ"}
-                </b>
-                <small>{processMessage || "รูปประมวลผลในเครื่องของคุณ"}</small>
-              </span>
-            </button>
-            <div className="file-info">
-              <h3>ข้อมูลรูปภาพ</h3>
-              <p>
-                <ImageIcon />
-                ขนาดไฟล์ <b>2.4 MB</b>
-              </p>
-              <p>
-                <Maximize2 />
-                ขนาดรูป <b>1024 × 1156 px</b>
-              </p>
-              <p>
-                <ImageIcon />
-                ประเภท <b>JPEG</b>
-              </p>
-            </div>
-          </aside>
-          <section className="preview-panel card">
-            <div
-              ref={stageRef}
-              className="photo-stage"
-              style={{ background: bg }}
-              onPointerDown={(e) => {
-                dragStart.current = { px: e.clientX, py: e.clientY, x, y };
-                e.currentTarget.setPointerCapture(e.pointerId);
-              }}
-              onPointerMove={(e) => {
-                if (!dragStart.current) return;
-                setX(dragStart.current.x + e.clientX - dragStart.current.px);
-                setY(dragStart.current.y + e.clientY - dragStart.current.py);
-              }}
-              onPointerUp={() => {
-                dragStart.current = null;
-              }}
-              onPointerCancel={() => {
-                dragStart.current = null;
-              }}
-            >
-              <img
-                className={`person-layer ${aiComposited ? "ai-result" : ""}`}
-                src={shownSrc}
-                alt="ภาพลูกค้า"
-                style={{
-                  transform: `translate(${x}px, ${y}px) scale(${zoom / 100})`,
-                  filter: `brightness(${100 + skin}%)`,
-                }}
-              />
-              {backgroundProcessing && (
-                <div className="background-ai-loading">
-                  <LoaderCircle className="spin" />
-                  <b>AI กำลังเปลี่ยนพื้นหลังทั้งภาพ…</b>
-                  <small>กรุณารอประมาณ 30–90 วินาที</small>
-                </div>
-              )}
-              {!before && (
-                <img
-                  className="template-layer"
-                  src={outfit.image}
-                  alt={outfit.label}
-                  style={{
-                    transform: `translateY(${hair * 2}px) scale(${1 + neck / 100})`,
-                  }}
-                />
-              )}
-              {!before && (
-                <>
-                  <div className="crop-box" />
-                  <div className="guide vertical" />
-                  <div className="guide eye" />
-                  <div className="guide chin" />
-                  <div
-                    className="face-ring"
-                    style={{ transform: `scale(${head / 75})` }}
-                  />
-                  <div className="guide-note">
-                    ลากรูปเพื่อจัดใบหน้า
-                    <br />
-                    ให้อยู่กึ่งกลางกรอบ
-                  </div>
-                  <span className="measure">
-                    ศีรษะอยู่ในกรอบ
-                    <br />
-                    <b>70–80%</b>
-                  </span>
-                </>
-              )}
-            </div>
-            <div className="preview-tools">
-              <button onClick={() => setBefore(!before)}>
-                <ImageIcon />
-                เปรียบเทียบ
-              </button>
-              <div className="segmented">
-                <button
-                  className={before ? "active" : ""}
-                  onClick={() => setBefore(true)}
-                >
-                  ก่อนปรับ
-                </button>
-                <button
-                  className={!before ? "active" : ""}
-                  onClick={() => setBefore(false)}
-                >
-                  หลังปรับ
-                </button>
-              </div>
-              <div className="zoom">
-                <button onClick={() => setZoom(Math.max(70, zoom - 5))}>
-                  <ZoomOut />
-                </button>
-                <b>{zoom}%</b>
-                <button onClick={() => setZoom(Math.min(130, zoom + 5))}>
-                  <ZoomIn />
-                </button>
-              </div>
-            </div>
-          </section>
-          <aside className="adjust-panel card">
-            <div className="panel-title">
-              <div>
-                <h2>
-                  <SlidersHorizontal />
-                  ปรับภาพให้สมบูรณ์แบบ
-                </h2>
-                <p>เลือกสิ่งที่ต้องการ แล้วให้ AI ปรับภาพจริง</p>
-              </div>
-              <button onClick={reset}>
-                <RotateCcw />
-                รีเซ็ตทั้งหมด
-              </button>
-            </div>
-            <button className="auto-button" onClick={auto}>
-              <WandSparkles />
-              <span>
-                <b>จัดตำแหน่งอัตโนมัติ</b>
-                <small>จัดขนาดใบหน้าและตำแหน่งชุด</small>
-              </span>
-              <b>›</b>
-            </button>
-            <section className="ai-editor">
-              <div className="ai-editor-title">
-                <b>
-                  <WandSparkles />
-                  ปรับด้วย AI จริง
-                </b>
-                <small>รักษาใบหน้าเดิมและแก้เฉพาะจุดที่เลือก</small>
-              </div>
-              <div className="ai-option-grid">
-                {aiOptions.map((o) => (
-                  <button
-                    type="button"
-                    key={o.id}
-                    className={aiSelected.includes(o.id) ? "selected" : ""}
-                    onClick={() => toggleAi(o.id)}
-                  >
-                    <span className="ai-check">
-                      {aiSelected.includes(o.id) && <Check />}
-                    </span>
-                    <span>
-                      <b>{o.label}</b>
-                      <small>{o.detail}</small>
-                    </span>
-                  </button>
-                ))}
-              </div>
-              {aiSelected.includes("hair-volume") && (
-                <div className="hair-volume">
-                  <span>ความหนาผม</span>
-                  {(["ลด", "คงเดิม", "เพิ่ม"] as const).map((v) => (
-                    <button
-                      key={v}
-                      className={hairVolume === v ? "active" : ""}
-                      onClick={() => setHairVolume(v)}
-                    >
-                      {v}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {aiSelected.includes("hairstyle") && (
-                <div className="hairstyle-control">
-                  <div className="hairstyle-heading">
-                    <b>เลือกทรงผม</b>
-                    <small>
-                      AI จะรักษาใบหน้าและแนวไรผมเดิม พร้อมปรับสีผมดำ Pro 50%
-                    </small>
-                  </div>
-                  <div className="hairstyle-options">
-                    {hairstyleOptions.map((style) => (
-                      <button
-                        type="button"
-                        key={style.id}
-                        className={hairstyle === style.id ? "active" : ""}
-                        onClick={() => setHairstyle(style.id)}
-                      >
-                        {style.previewImage ? (
-                          <img src={style.previewImage} alt={style.label} />
-                        ) : (
-                          <UserRound />
-                        )}
-                        <span>{style.label}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {aiSelected.includes("skin-light") && (
-                <div className="skin-style-control">
-                  <div className="skin-style-title">
-                    <span>
-                      <b>แสงและผิวธรรมชาติ</b>
-                      <small>รักษารูขุมขนและหน้าเดิม</small>
-                    </span>
-                    <output>{skinStrength}%</output>
-                  </div>
-                  <div className="skin-style-presets">
-                    {(["ธรรมชาติ", "สดใส", "สตูดิโอ"] as const).map(
-                      (style) => (
-                        <button
-                          type="button"
-                          key={style}
-                          className={skinStyle === style ? "active" : ""}
-                          onClick={() => setSkinStyle(style)}
-                        >
-                          {style}
-                        </button>
-                      ),
-                    )}
-                  </div>
-                  <label>
-                    <span>ระดับการปรับ</span>
-                    <input
-                      aria-label="ระดับการปรับแสงและผิว"
-                      type="range"
-                      min="0"
-                      max="100"
-                      step="5"
-                      value={skinStrength}
-                      onChange={(e) => setSkinStrength(Number(e.target.value))}
-                    />
-                  </label>
-                  <small className="skin-apply-hint">
-                    ตั้งค่าแล้วกด “ปรับด้วย AI” ด้านล่างเพื่อใช้กับภาพ
-                  </small>
-                </div>
-              )}
-              <button
-                className="run-ai"
-                onClick={aiEdit}
-                disabled={aiProcessing}
-              >
-                {aiProcessing ? (
-                  <LoaderCircle className="spin" />
-                ) : (
-                  <WandSparkles />
-                )}
-                {aiProcessing
-                  ? "กำลังปรับภาพ…"
-                  : `ปรับด้วย AI (${aiSelected.length} รายการ)`}
-              </button>
-            </section>
-            <details className="manual-adjust">
-              <summary>จัดตำแหน่งด้วยมือ</summary>
-              <div className="controls">
-                <Control label="ใบหน้าซ้าย–ขวา" value={x} onChange={setX} />
-                <Control label="ใบหน้าขึ้น–ลง" value={y} onChange={setY} />
-                <Control
-                  label="ขนาดศีรษะ"
-                  value={head}
-                  min={65}
-                  max={90}
-                  onChange={setHead}
-                  suffix="%"
-                />
-                <Control
-                  label="ขนาดชุด"
-                  value={neck}
-                  min={-12}
-                  max={12}
-                  onChange={setNeck}
-                />
-                <Control
-                  label="ชุดขึ้น–ลง"
-                  value={hair}
-                  min={-20}
-                  max={20}
-                  onChange={setHair}
-                />
-                <Control
-                  label="ความสว่าง"
-                  value={skin}
-                  min={-10}
-                  max={10}
-                  onChange={setSkin}
-                />
-              </div>
-            </details>
-            <div className="background-control">
-              <button>
-                <span className="swatch" style={{ background: bg }} />
-                พื้นหลัง
-                <ChevronDown />
-              </button>
-              <div className="colors">
-                {[
-                  "#1682ee",
-                  "#fff",
-                  "#cfd5df",
-                  "#61a8f6",
-                  "#cf202e",
-                  "#a6d8ff",
-                ].map((c) => (
-                  <button
-                    aria-label={`สีพื้นหลัง ${c}`}
-                    className={bg === c ? "selected" : ""}
-                    key={c}
-                    onClick={() => changeBackground(c)}
-                    disabled={backgroundProcessing}
-                    style={{ background: c }}
-                  >
-                    {bg === c && <Check />}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </aside>
-        </div>
-        <section className="outfit-bar">
-          <div className="outfit-heading">
-            <b>เลือกชุด</b>
-            <div className="category-tabs">
-              <button className="active">▰ ข้าราชการ</button>
-              <button>♟ ชุดราชการอื่น ๆ</button>
-              <button>▣ สมัครงาน</button>
-              <button>◆ นักเรียน/นักศึกษา</button>
-              <button>◆ รับปริญญา</button>
-            </div>
-          </div>
-          <div className="outfit-content">
-            <div className="outfit-list">
-              {outfits.map((o) => (
-                <button
-                  key={o.id}
-                  onClick={() => setSelected(o.id)}
-                  className={`outfit ${selected === o.id ? "selected" : ""} ${o.tone}`}
-                >
-                  <img src={o.image} alt={o.label} />
-                  <b>{o.label}</b>
-                  <small>({o.sub})</small>
-                </button>
-              ))}
-              <button className="all-outfits">
-                <UserRound />
-                ดูเทมเพลตทั้งหมด<span>›</span>
-              </button>
-            </div>
-            <div className="ready-card">
-              <h3>▣ รูปพร้อมใช้ มาตรฐานราชการ</h3>
-              <p>
-                <Check />
-                ขนาดและสัดส่วนถูกต้องตามระเบียบ
-              </p>
-              <p>
-                <Check />
-                พื้นหลังสีมาตรฐาน
-              </p>
-              <p>
-                <Check />
-                แต่งกายถูกต้องตามประเภท
-              </p>
-              <p>
-                <Check />
-                ใช้ได้ทั้งสมัครงานและราชการ
-              </p>
-            </div>
+          <div className="photoid-result-title">ตัวอย่างผลลัพธ์</div>
+          <div className="photoid-result-grid">
+            <div className="photoid-example"><img src="/demo/official.jpg" alt="รูปสมัครงาน" /><b>รูปสมัครงาน</b></div>
+            <div className="photoid-example"><img src={shownSrc} alt="สูทหญิงสุภาพ" /><b>{outfit.label}</b></div>
+            <div className="photoid-example"><img src="/demo/original.png" alt="ระยะมาตรฐาน" /><b>ระยะมาตรฐาน 3:4</b></div>
           </div>
         </section>
-      </section>
+
+        <aside className="photoid-builder-card">
+          <h2>สร้างรูปติดบัตร</h2>
+          <button className="photoid-upload" onClick={() => inputRef.current?.click()}>
+            <span className="photoid-upload-icon"><UserRound /></span><span><b>ยังไม่ได้เลือกรูป</b><small>JPG หรือ PNG สูงสุด 10 MB</small></span><em>เลือกรูป</em>
+          </button>
+          <input ref={inputRef} type="file" accept="image/*" onChange={pickFile} hidden />
+
+          <section className="photoid-step-section">
+            <div className="photoid-section-head"><b>1. เลือกแพตเทิร์นชุด</b><small>ใช้ไฟล์ชุดเดิมของคุณ</small></div>
+            <div className="photoid-category-tabs">
+              {["สมัครงาน", "ข้าราชการ", "นักเรียน", "นักศึกษา", "ชุดครุย"].map((category) => (
+                <button key={category} className={outfitCategory === category ? "active" : ""}
+                  onClick={() => { setOutfitCategory(category); const first = outfits.find((item) => item.category === category); if (first) setSelected(first.id); }}>{category}</button>
+              ))}
+            </div>
+            <div className="photoid-outfit-grid">
+              {visibleOutfits.length ? visibleOutfits.map((o) => (
+                <button key={o.id} onClick={() => setSelected(o.id)} className={`photoid-outfit-card ${selected === o.id ? "selected" : ""}`}>
+                  <span className="photoid-outfit-image"><img src={o.image} alt={o.label} /></span><b>{o.label}</b>
+                </button>
+              )) : <div className="photoid-empty-category">หมวดนี้ยังไม่มีเทมเพลตชุด</div>}
+            </div>
+          </section>
+
+          <section className="photoid-step-section">
+            <div className="photoid-section-head"><b>2. เลือกทรงผม</b><small>แบบทรงผม 29 แบบ</small></div>
+            <div className="photoid-hair-grid">
+              {hairstyleOptions.map((item) => (
+                <button key={item.id} className={hairstyle === item.id ? "selected" : ""} onClick={() => setHairstyle(item.id)}>
+                  {item.previewImage ? <img src={item.previewImage} alt={item.label} /> : <span className="no-hair">∅</span>}<small>{item.label}</small>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <div className="photoid-bottom-row">
+            <section className="photoid-mini-section"><b>3. เลือกพื้นหลัง</b>
+              <div className="photoid-bg-options">
+                {[{c:"#1682ee",l:"ฟ้ามาตรฐาน"},{c:"#ffffff",l:"ขาว"},{c:"#cfd5df",l:"เทาอ่อน"},{c:"#173b68",l:"น้ำเงินเข้ม"}].map((item) => (
+                  <button key={item.c} className={bg === item.c ? "selected" : ""} onClick={() => changeBackground(item.c)} disabled={backgroundProcessing}>
+                    <span style={{background:item.c}} /><small>{item.l}</small>
+                  </button>))}
+              </div>
+            </section>
+            <section className="photoid-format-section"><b>4. เลือกขนาดรูป</b>
+              <select aria-label="ขนาดรูป" defaultValue="3:4"><option value="3:4">รูปสมัครงาน (3:4)</option><option value="1inch">1 นิ้ว</option><option value="1.5inch">1.5 นิ้ว</option><option value="2inch">2 นิ้ว</option></select>
+            </section>
+          </div>
+
+          <details className="photoid-advanced"><summary>ตั้งค่าการปรับภาพเพิ่มเติม</summary>
+            <div className="photoid-ai-options">{aiOptions.map((option) => (
+              <label key={option.id}><input type="checkbox" checked={aiSelected.includes(option.id)} onChange={() => toggleAi(option.id)} /><span><b>{option.label}</b><small>{option.detail}</small></span></label>))}</div>
+            <div className="photoid-manual-controls">
+              <Control label="ใบหน้าซ้าย–ขวา" value={x} onChange={setX} /><Control label="ใบหน้าขึ้น–ลง" value={y} onChange={setY} />
+              <Control label="ขนาดศีรษะ" value={head} min={65} max={90} onChange={setHead} suffix="%" /><Control label="ขนาดชุด" value={neck} min={-12} max={12} onChange={setNeck} />
+              <Control label="ชุดขึ้น–ลง" value={hair} min={-20} max={20} onChange={setHair} /><Control label="ความสว่าง" value={skin} min={-10} max={10} onChange={setSkin} />
+            </div>
+          </details>
+          <button className="photoid-ai-button" onClick={aiEdit} disabled={aiProcessing}>{aiProcessing ? <LoaderCircle className="spin" /> : <WandSparkles />}{aiProcessing ? "กำลังสร้างรูปด้วย AI…" : "สร้างรูปด้วย AI"}</button>
+          <button className="photoid-download-button" onClick={download}><Download /> ดาวน์โหลดรูป</button>
+          <small className="photoid-credit-note">ใช้เครดิตสร้างภาพ AI</small>
+          {processMessage && <p className="photoid-process-message">{processMessage}</p>}
+        </aside>
+      </div>
     </main>
   );
 }
