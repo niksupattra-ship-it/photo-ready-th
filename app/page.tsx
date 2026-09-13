@@ -341,7 +341,7 @@ export default function Home() {
         (item) => item.id === hairstyleId,
       );
       const sourceUrl = hairOnly
-        ? hairstyleBase.current || outfitBase.current || original
+        ? outfitBase.current || hairstyleBase.current || original
         : original;
       const source = await fetch(sourceUrl);
       const blob = await source.blob();
@@ -351,6 +351,7 @@ export default function Home() {
       form.append("hairVolume", hairVolume);
       form.append("skinStyle", skinStyle);
       form.append("skinStrength", String(skinStrength));
+      form.append("background", bg);
       if (hairOnly && selectedHairstyle?.preview) {
         // Send the same clear, full-model hairstyle reference shown in the UI.
         // The old white-face cutout was ambiguous to the image model and often
@@ -360,10 +361,6 @@ export default function Home() {
         form.append("hairstyle", selectedHairstyle.label);
         form.append("operations", JSON.stringify(["hairstyle"]));
         form.append("editMode", "hairstyle-only");
-        const editMask = await createHairEditMask(sourceUrl);
-        if (!editMask)
-          throw new Error("ตรวจพื้นที่ทรงผมไม่สำเร็จ กรุณาใช้รูปหน้าตรงที่เห็นศีรษะชัด");
-        form.append("mask", editMask, "hair-edit-mask.png");
       }
       const response = await fetch("/api/ai-edit", {
         method: "POST",
@@ -380,13 +377,13 @@ export default function Home() {
       setX(0);
       setY(0);
       setZoom(100);
-      if (hairOnly && aiComposited) await removeBackground(finalImage);
-      else if (aiComposited) await removeBackground(finalImage);
-      else setCutout(null);
+      // Hairstyle results are intentionally one finished opaque portrait.
+      // This mirrors the reliable flow used to create the hairstyle previews.
+      setCutout(null);
       setBefore(false);
       setProcessMessage(
-        aiComposited
-          ? "เปลี่ยนทรงผมและแยกพื้นหลังเรียบร้อยแล้ว"
+        hairOnly
+          ? "เปลี่ยนทรงผมและใช้สีพื้นหลังที่เลือกเรียบร้อยแล้ว"
           : "ปรับภาพเรียบร้อยแล้ว",
       );
     } catch (e) {
