@@ -311,7 +311,8 @@ export default function Home() {
     }
   }
   async function aiEdit(hairstyleId = hairstyle) {
-    if (!aiSelected.length) {
+    const hairOnly = hairstyleId !== "original";
+    if (!hairOnly && !aiSelected.length) {
       setProcessMessage("กรุณาเลือกอย่างน้อย 1 รายการ");
       return;
     }
@@ -321,7 +322,6 @@ export default function Home() {
       const selectedHairstyle = hairstyleOptions.find(
         (item) => item.id === hairstyleId,
       );
-      const hairOnly = hairstyleId !== "original";
       const sourceUrl = hairOnly
         ? hairstyleBase.current || outfitBase.current || original
         : original;
@@ -333,8 +333,11 @@ export default function Home() {
       form.append("hairVolume", hairVolume);
       form.append("skinStyle", skinStyle);
       form.append("skinStrength", String(skinStrength));
-      if (hairOnly && selectedHairstyle?.image) {
-        const ref = await fetch(selectedHairstyle.image);
+      if (hairOnly && selectedHairstyle?.preview) {
+        // Send the same clear, full-model hairstyle reference shown in the UI.
+        // The old white-face cutout was ambiguous to the image model and often
+        // resulted in no hairstyle change at all.
+        const ref = await fetch(selectedHairstyle.preview);
         form.append("hairstyleRef", await ref.blob(), `${hairstyleId}.png`);
         form.append("hairstyle", selectedHairstyle.label);
         form.append("operations", JSON.stringify(["hairstyle"]));
