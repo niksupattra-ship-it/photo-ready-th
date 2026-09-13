@@ -323,7 +323,7 @@ export default function Home() {
       );
       const hairOnly = hairstyleId !== "original";
       const sourceUrl = hairOnly
-        ? outfitCutout.current || hairstyleBase.current || original
+        ? hairstyleBase.current || outfitBase.current || original
         : original;
       const source = await fetch(sourceUrl);
       const blob = await source.blob();
@@ -334,12 +334,8 @@ export default function Home() {
       form.append("skinStyle", skinStyle);
       form.append("skinStrength", String(skinStrength));
       if (hairOnly && selectedHairstyle?.image) {
-        const [ref, editMask] = await Promise.all([
-          fetch(selectedHairstyle.image),
-          createHairEditMask(sourceUrl),
-        ]);
+        const ref = await fetch(selectedHairstyle.image);
         form.append("hairstyleRef", await ref.blob(), `${hairstyleId}.png`);
-        if (editMask) form.append("mask", editMask, "hair-edit-mask.png");
         form.append("hairstyle", selectedHairstyle.label);
         form.append("operations", JSON.stringify(["hairstyle"]));
         form.append("editMode", "hairstyle-only");
@@ -359,7 +355,7 @@ export default function Home() {
       setX(0);
       setY(0);
       setZoom(100);
-      if (hairOnly && aiComposited) setCutout(finalImage);
+      if (hairOnly && aiComposited) await removeBackground(finalImage);
       else if (aiComposited) await removeBackground(finalImage);
       else setCutout(null);
       setBefore(false);
@@ -419,7 +415,6 @@ export default function Home() {
       setAiComposited(true);
       const separated = await removeBackground(data.image);
       outfitCutout.current = separated;
-      hairstyleBase.current = separated || data.image;
       setProcessMessage(
         separated
           ? "เปลี่ยนชุดและแยกพื้นหลังเรียบร้อยแล้ว"
