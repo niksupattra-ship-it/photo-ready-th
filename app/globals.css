@@ -800,10 +800,10 @@ body {
 .photo-stage > .template-layer {
   position: absolute;
   z-index: 2;
-  width: 108%;
+  width: 100%;
   height: auto;
-  left: -4%;
-  bottom: -34%;
+  left: 0;
+  bottom: 0;
   object-fit: contain;
   transform-origin: bottom center;
   pointer-events: none;
