@@ -461,6 +461,27 @@ export default function Home() {
     }
   }
 
+  async function normalizeAiResultToThreeFour(src: string) {
+    const image = await loadImage(src);
+    const canvas = document.createElement("canvas");
+    canvas.width = 900;
+    canvas.height = 1200;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return src;
+
+    // AI portrait output is 2:3 (1024x1536), while the app standard is 3:4.
+    // Center-crop only the small excess height so the visible result exactly fills
+    // the 3:4 frame. The API prompt intentionally generates extra body/arm margin
+    // for this crop, so we do not stretch the person and do not leave side bars.
+    const scale = Math.max(canvas.width / image.naturalWidth, canvas.height / image.naturalHeight);
+    const drawWidth = image.naturalWidth * scale;
+    const drawHeight = image.naturalHeight * scale;
+    const drawX = (canvas.width - drawWidth) / 2;
+    const drawY = (canvas.height - drawHeight) / 2;
+    ctx.drawImage(image, drawX, drawY, drawWidth, drawHeight);
+    return canvas.toDataURL("image/png");
+  }
+
   async function aiEdit() {
     if (!aiSelected.length) {
       setProcessMessage("กรุณาเลือกอย่างน้อย 1 รายการ");
@@ -505,12 +526,13 @@ export default function Home() {
       };
       if (!response.ok || !data.image)
         throw new Error(data.error || "AI ปรับภาพไม่สำเร็จ");
-      setOriginal(data.image);
-      setAiBaseImage(data.image);
+      const normalizedImage = await normalizeAiResultToThreeFour(data.image);
+      setOriginal(normalizedImage);
+      setAiBaseImage(normalizedImage);
       setAiComposited(true);
       setCutout(null);
       setBefore(false);
-      void prepareComparison(baseOriginal, data.image);
+      void prepareComparison(baseOriginal, normalizedImage);
       setProcessMessage("AI ปรับภาพแบบ V3 สำเร็จแล้ว");
     } catch (e) {
       setProcessMessage(
@@ -544,7 +566,9 @@ export default function Home() {
       };
       if (!response.ok || !data.image)
         throw new Error(data.error || "AI เปลี่ยนพื้นหลังไม่สำเร็จ");
-      setOriginal(data.image);
+      const normalizedImage = await normalizeAiResultToThreeFour(data.image);
+      setOriginal(normalizedImage);
+      setAiBaseImage(normalizedImage);
       setCutout(null);
       setBg(color);
       setProcessMessage("AI เปลี่ยนพื้นหลังและเก็บขอบเรียบร้อยแล้ว");
