@@ -81,13 +81,14 @@ const aiOptions = [
   },
 ];
 const hairstyleOptions = [
-  { id: "original", label: "ทรงเดิม", image: null },
+  { id: "original", label: "ทรงเดิม", image: null, previewImage: null },
   ...Array.from({ length: 29 }, (_, index) => {
     const number = String(index + 1).padStart(2, "0");
     return {
       id: `hair-${number}`,
       label: `แบบ ${number}`,
       image: `/hairstyles/hair-${number}.png`,
+      previewImage: `/hairstyle-previews/hair-${number}.png`,
     };
   }),
 ];
@@ -832,8 +833,8 @@ export default function Home() {
                         className={hairstyle === style.id ? "active" : ""}
                         onClick={() => setHairstyle(style.id)}
                       >
-                        {style.image ? (
-                          <img src={style.image} alt={style.label} />
+                        {style.previewImage ? (
+                          <img src={style.previewImage} alt={style.label} />
                         ) : (
                           <UserRound />
                         )}
