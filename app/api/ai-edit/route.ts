@@ -49,6 +49,7 @@ export async function POST(request: Request) {
     const outfitChange = operations.includes("outfit") && outfit instanceof File;
     const outfitLabel = String(input.get("outfitLabel") || "ชุดที่เลือก");
     const hairstyleRef = input.get("hairstyleRef");
+    const editMask = input.get("mask");
     const hairstyleOnly =
       operations.length === 1 &&
       operations[0] === "hairstyle" &&
@@ -72,6 +73,8 @@ export async function POST(request: Request) {
         hairstyleRef,
         hairstyleRef.name || "hairstyle.png",
       );
+    if (hairstyleOnly && editMask instanceof File)
+      body.append("mask", editMask, editMask.name || "hair-edit-mask.png");
     body.append("prompt", prompt);
     body.append("input_fidelity", "high");
     body.append("quality", "high");
