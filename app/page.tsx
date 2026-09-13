@@ -286,9 +286,10 @@ export default function Home() {
       const scaleX = canvas.width / source.naturalWidth;
       const scaleY = canvas.height / source.naturalHeight;
       const cx = (face.originX + face.width / 2) * scaleX;
-      const cy = (face.originY + face.height * 0.56) * scaleY;
-      const rx = face.width * 0.43 * scaleX;
-      const ry = face.height * 0.47 * scaleY;
+      // ล็อกเฉพาะอัตลักษณ์กลางใบหน้า ไม่คลุมหน้าผาก ไรผม หรือหน้าม้า
+      const cy = (face.originY + face.height * 0.62) * scaleY;
+      const rx = face.width * 0.39 * scaleX;
+      const ry = face.height * 0.35 * scaleY;
       layerCtx.globalCompositeOperation = "destination-in";
       layerCtx.filter = "blur(2px)";
       layerCtx.beginPath();
@@ -314,7 +315,9 @@ export default function Home() {
         (item) => item.id === hairstyleId,
       );
       const hairOnly = hairstyleId !== "original";
-      const sourceUrl = hairOnly ? hairstyleBase.current || original : original;
+      const sourceUrl = hairOnly
+        ? outfitCutout.current || hairstyleBase.current || original
+        : original;
       const source = await fetch(sourceUrl);
       const blob = await source.blob();
       const form = new FormData();
@@ -328,6 +331,7 @@ export default function Home() {
         form.append("hairstyleRef", await ref.blob(), `${hairstyleId}.png`);
         form.append("hairstyle", selectedHairstyle.label);
         form.append("operations", JSON.stringify(["hairstyle"]));
+        form.append("editMode", "hairstyle-only");
       }
       const response = await fetch("/api/ai-edit", {
         method: "POST",
@@ -346,8 +350,7 @@ export default function Home() {
       setX(0);
       setY(0);
       setZoom(100);
-      if (hairOnly && aiComposited) setCutout(finalImage);
-      else if (aiComposited) await removeBackground(finalImage);
+      if (aiComposited) await removeBackground(finalImage);
       else setCutout(null);
       setBefore(false);
       setProcessMessage(
@@ -406,6 +409,7 @@ export default function Home() {
       setAiComposited(true);
       const separated = await removeBackground(data.image);
       outfitCutout.current = separated;
+      hairstyleBase.current = separated || data.image;
       setProcessMessage(
         separated
           ? "เปลี่ยนชุดและแยกพื้นหลังเรียบร้อยแล้ว"
