@@ -594,6 +594,34 @@ export default function Home() {
       }
     }
 
+    // Remove enclosed chroma pockets BEFORE edge feathering.
+    // Background regions between an arm and the torso can be completely enclosed by
+    // the person silhouette, so a border-connected flood fill can never reach them.
+    // The AI temporary chroma is deliberately a highly saturated magenta; remove only
+    // pixels that are unmistakably that chroma family. Natural skin/lips/hair/suit are
+    // protected by the strong saturation + channel-dominance thresholds below.
+    for (let pixel = 0; pixel < count; pixel++) {
+      const i = pixel * 4;
+      if (data[i + 3] <= 12) continue;
+
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const magentaDominance = Math.min(r, b) - g;
+      const rbBalance = Math.abs(r - b);
+
+      // Pure / near-pure temporary magenta, including enclosed holes between arms/body.
+      if (
+        r >= 145 &&
+        b >= 105 &&
+        g <= 125 &&
+        magentaDominance >= 62 &&
+        rbBalance <= 135
+      ) {
+        data[i + 3] = 0;
+      }
+    }
+
     // Final chroma-fringe cleanup. The AI sometimes leaves a thin magenta halo
     // (#FF00FF spill) just OUTSIDE the true hair/clothing edge. Those pixels can
     // survive the background flood-fill because they are too far from the detected
