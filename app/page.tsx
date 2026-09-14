@@ -792,10 +792,18 @@ export default function Home() {
 
       // One shared official-photo geometry for every level/ministry template:
       // fixed 3:4 garment placement; only the uploaded head/neck is fitted to it.
-      const targetFaceHeight = 250;
-      const targetFaceCenterX = 450;
-      const targetFaceCenterY = 300;
-      const scale = targetFaceHeight / face.height;
+      // Derive the person's scale from the REAL template geometry, not from
+      // the uploaded photo.  This first official template has a ~94 px neck
+      // opening near y=620; a natural female face is about 2.45x that width.
+      // Future official templates can use the same metadata pattern.
+      const templateCollarCenterX = 450;
+      const templateCollarJoinY = 620;
+      const templateNeckOpeningWidth = 94;
+      const targetFaceWidth = templateNeckOpeningWidth * 2.45;
+      const targetFaceCenterX = templateCollarCenterX;
+      const targetFaceCenterY = 310;
+      const scale = targetFaceWidth / face.width;
+      const targetFaceHeight = face.height * scale;
       const sourceFaceCenterX = face.originX + face.width / 2;
       const sourceFaceCenterY = face.originY + face.height / 2;
       const drawX = targetFaceCenterX - sourceFaceCenterX * scale;
@@ -811,7 +819,6 @@ export default function Home() {
       //   2) a narrow neck corridor that reaches the uniform collar
       //
       // This is deterministic Canvas compositing only; no AI/generative edit.
-      const targetFaceWidth = face.width * scale;
       const headHalfWidth = Math.max(190, targetFaceWidth * 0.92);
       const headTop = Math.max(25, targetFaceCenterY - targetFaceHeight * 1.05);
       const headBottom = targetFaceCenterY + targetFaceHeight * 0.92;
@@ -862,61 +869,100 @@ export default function Home() {
       // re-designed. All future official templates use this same 3:4 placement.
       ctx.drawImage(templateImage, 0, 0, 900, 1200);
 
-      // Base composite is already correct for head scale + exact real uniform.
-      // AI is used ONLY to blend the anatomical neck/collar connection through
-      // a small transparent edit mask. Everything outside the mask is locked.
+      // The full 900x1200 composition is now FINAL geometry.  Never send the
+      // whole official photo through the image model, because that can reframe
+      // the uniform, fill transparent background, or crop the real template.
+      // Instead send ONLY a square neck/collar patch to AI, then paste back
+      // ONLY the small masked neck region.
       const baseComposite = canvas.toDataURL("image/png");
 
       setProcessMessage("กำลังปรับเฉพาะคอและรอยต่อปกเสื้อให้สมดุล…");
 
-      const maskCanvas = document.createElement("canvas");
-      maskCanvas.width = 900;
-      maskCanvas.height = 1200;
-      const maskCtx = maskCanvas.getContext("2d");
-      if (!maskCtx) throw new Error("สร้างพื้นที่ปรับคอไม่ได้");
+      const patchX = 245;
+      const patchY = 365;
+      const patchW = 410;
+      const patchH = 410;
+      const patchSize = 512;
 
-      // Opaque = protected. Transparent = AI may edit.
+      const patchCanvas = document.createElement("canvas");
+      patchCanvas.width = patchSize;
+      patchCanvas.height = patchSize;
+      const patchCtx = patchCanvas.getContext("2d");
+      if (!patchCtx) throw new Error("สร้างพื้นที่ปรับคอไม่ได้");
+      patchCtx.imageSmoothingEnabled = true;
+      patchCtx.imageSmoothingQuality = "high";
+      patchCtx.drawImage(
+        canvas,
+        patchX,
+        patchY,
+        patchW,
+        patchH,
+        0,
+        0,
+        patchSize,
+        patchSize,
+      );
+
+      // API edit mask: black/opaque = locked, transparent = editable.
+      const maskCanvas = document.createElement("canvas");
+      maskCanvas.width = patchSize;
+      maskCanvas.height = patchSize;
+      const maskCtx = maskCanvas.getContext("2d");
+      if (!maskCtx) throw new Error("สร้าง mask คอไม่ได้");
       maskCtx.fillStyle = "rgba(0,0,0,1)";
-      maskCtx.fillRect(0, 0, 900, 1200);
+      maskCtx.fillRect(0, 0, patchSize, patchSize);
       maskCtx.globalCompositeOperation = "destination-out";
 
-      // Neck-only edit zone. Keep the face, hair, shoulders, insignia and the
-      // rest of the real uniform outside this zone fully protected.
-      const editCenterX = 450;
-      const editTopY = Math.max(430, targetFaceCenterY + targetFaceHeight * 0.47);
-      const editBottomY = 670;
-      const editTopHalf = Math.max(100, targetFaceWidth * 0.33);
-      const editBottomHalf = Math.max(135, targetFaceWidth * 0.43);
+      const toPatchX = (x: number) => ((x - patchX) / patchW) * patchSize;
+      const toPatchY = (y: number) => ((y - patchY) / patchH) * patchSize;
+
+      // Editable area begins below the jaw and ends just inside the collar.
+      // Face, hair, epaulettes, pins, ribbons, tie and the rest of the uniform
+      // are outside this zone and can never be replaced.
+      const editCenterX = templateCollarCenterX;
+      const editTopY = Math.max(
+        targetFaceCenterY + targetFaceHeight * 0.54,
+        430,
+      );
+      const editBottomY = 650;
+      const editTopHalf = Math.max(62, targetFaceWidth * 0.25);
+      const editBottomHalf = Math.max(78, targetFaceWidth * 0.32);
 
       maskCtx.beginPath();
-      maskCtx.moveTo(editCenterX - editTopHalf, editTopY);
-      maskCtx.quadraticCurveTo(
-        editCenterX - editBottomHalf,
-        (editTopY + editBottomY) / 2,
-        editCenterX - editBottomHalf,
-        editBottomY,
+      maskCtx.moveTo(
+        toPatchX(editCenterX - editTopHalf),
+        toPatchY(editTopY),
       );
-      maskCtx.lineTo(editCenterX + editBottomHalf, editBottomY);
       maskCtx.quadraticCurveTo(
-        editCenterX + editBottomHalf,
-        (editTopY + editBottomY) / 2,
-        editCenterX + editTopHalf,
-        editTopY,
+        toPatchX(editCenterX - editBottomHalf),
+        toPatchY((editTopY + editBottomY) / 2),
+        toPatchX(editCenterX - editBottomHalf),
+        toPatchY(editBottomY),
+      );
+      maskCtx.lineTo(
+        toPatchX(editCenterX + editBottomHalf),
+        toPatchY(editBottomY),
+      );
+      maskCtx.quadraticCurveTo(
+        toPatchX(editCenterX + editBottomHalf),
+        toPatchY((editTopY + editBottomY) / 2),
+        toPatchX(editCenterX + editTopHalf),
+        toPatchY(editTopY),
       );
       maskCtx.closePath();
       maskCtx.fill();
 
-      const [compositeResponse, maskResponse] = await Promise.all([
-        fetch(baseComposite),
+      const [patchResponse, maskResponse] = await Promise.all([
+        fetch(patchCanvas.toDataURL("image/png")),
         fetch(maskCanvas.toDataURL("image/png")),
       ]);
-      const [compositeBlob, maskBlob] = await Promise.all([
-        compositeResponse.blob(),
+      const [patchBlob, maskBlob] = await Promise.all([
+        patchResponse.blob(),
         maskResponse.blob(),
       ]);
 
       const blendForm = new FormData();
-      blendForm.append("image", compositeBlob, "official-composite.png");
+      blendForm.append("image", patchBlob, "official-neck-patch.png");
       blendForm.append("mask", maskBlob, "official-neck-mask.png");
 
       const blendResponse = await fetch("/api/official-neck-blend", {
@@ -934,9 +980,42 @@ export default function Home() {
         );
       }
 
-      // The API returns 2:3. Normalize only framing/canvas to the existing 3:4
-      // workflow; uniform geometry and every locked detail remain unchanged.
-      const result = await normalizeAiResultToThreeFour(blendData.image, bg);
+      const aiPatch = await loadImage(blendData.image);
+
+      // Composite ONLY the neck mask back into the untouched 3:4 original.
+      // This guarantees the real template, transparent outer background and
+      // complete garment framing remain pixel-for-pixel unchanged.
+      const resultCanvas = document.createElement("canvas");
+      resultCanvas.width = 900;
+      resultCanvas.height = 1200;
+      const resultCtx = resultCanvas.getContext("2d");
+      if (!resultCtx) throw new Error("รวมภาพชุดข้าราชการไม่ได้");
+      resultCtx.drawImage(canvas, 0, 0);
+
+      resultCtx.save();
+      resultCtx.beginPath();
+      resultCtx.moveTo(editCenterX - editTopHalf, editTopY);
+      resultCtx.quadraticCurveTo(
+        editCenterX - editBottomHalf,
+        (editTopY + editBottomY) / 2,
+        editCenterX - editBottomHalf,
+        editBottomY,
+      );
+      resultCtx.lineTo(editCenterX + editBottomHalf, editBottomY);
+      resultCtx.quadraticCurveTo(
+        editCenterX + editBottomHalf,
+        (editTopY + editBottomY) / 2,
+        editCenterX + editTopHalf,
+        editTopY,
+      );
+      resultCtx.closePath();
+      resultCtx.clip();
+      resultCtx.imageSmoothingEnabled = true;
+      resultCtx.imageSmoothingQuality = "high";
+      resultCtx.drawImage(aiPatch, patchX, patchY, patchW, patchH);
+      resultCtx.restore();
+
+      const result = resultCanvas.toDataURL("image/png");
       setOriginal(result);
       setAiBaseImage(result);
       setAiComposited(true);
@@ -947,7 +1026,7 @@ export default function Home() {
       setBefore(false);
       void prepareComparison(baseOriginal, result);
       setProcessMessage(
-        "สำเร็จ — ใช้ชุดจริงและ AI ปรับเฉพาะคอ/รอยต่อปกเสื้อ",
+        "สำเร็จ — ชุดจริงคงเดิม 100% และ AI ปรับเฉพาะคอ/รอยต่อปกเสื้อ",
       );
     } catch (e) {
       setProcessMessage(
