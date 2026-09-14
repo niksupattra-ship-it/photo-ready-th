@@ -1231,6 +1231,7 @@ export default function Home() {
     );
     try {
       const isOfficialTemplate = outfit.id.startsWith("official-");
+      const isJobApplication = outfit.category === "สมัครงาน";
       const source = await fetch(baseOriginal);
       const sourceBlob = await source.blob();
 
@@ -1238,7 +1239,10 @@ export default function Home() {
       // The real uniform template never enters the paid request.
       const blob = isOfficialTemplate
         ? await prepareOfficialPortraitInputBlob(sourceBlob)
-        : await optimizeAiInputBlob(sourceBlob, 1536);
+        : await optimizeAiInputBlob(
+            sourceBlob,
+            isJobApplication ? 1280 : 1536,
+          );
 
       const form = new FormData();
       form.append("image", blob, "portrait.png");
@@ -1247,7 +1251,10 @@ export default function Home() {
       if (!isOfficialTemplate) {
         const outfitSource = await fetch(outfit.image);
         const outfitSourceBlob = await outfitSource.blob();
-        const outfitBlob = await optimizeAiInputBlob(outfitSourceBlob, 1536);
+        const outfitBlob = await optimizeAiInputBlob(
+          outfitSourceBlob,
+          isJobApplication ? 1024 : 1536,
+        );
         form.append("outfit", outfitBlob, "outfit-reference.png");
       }
       form.append("outfitLabel", `${outfit.label} (${outfit.sub})`);
@@ -1266,7 +1273,7 @@ export default function Home() {
         const hairstyleSourceBlob = await hairstyleSource.blob();
         const hairstyleBlob = await optimizeAiInputBlob(
           hairstyleSourceBlob,
-          isOfficialTemplate ? 640 : 1280,
+          isOfficialTemplate ? 640 : isJobApplication ? 896 : 1280,
         );
         form.append("hairstyleRef", hairstyleBlob, `${hairstyle}.png`);
       }
