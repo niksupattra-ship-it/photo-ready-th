@@ -164,6 +164,78 @@ async function optimizeAiInputBlob(
   }
 }
 
+
+async function prepareOfficialPortraitInputBlob(blob: Blob): Promise<Blob> {
+  // OFFICIAL MODE COST OPTIMIZATION:
+  // The AI only needs the real head, hair and neck. Crop those pixels locally
+  // before upload instead of paying high-fidelity image tokens for the full body.
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    const [{ FilesetResolver, FaceDetector }, image] = await Promise.all([
+      import("@mediapipe/tasks-vision"),
+      loadImage(objectUrl),
+    ]);
+    const vision = await FilesetResolver.forVisionTasks(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm",
+    );
+    const detector = await FaceDetector.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath:
+          "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/latest/blaze_face_short_range.tflite",
+      },
+      runningMode: "IMAGE",
+      minDetectionConfidence: 0.5,
+    });
+    try {
+      const face = detector.detect(image).detections[0]?.boundingBox;
+      if (!face) return optimizeAiInputBlob(blob, 896);
+
+      const iw = image.naturalWidth || image.width;
+      const ih = image.naturalHeight || image.height;
+      const faceCx = face.originX + face.width / 2;
+      const faceCy = face.originY + face.height / 2;
+
+      // Include complete hairstyle + ears + enough neck, but intentionally
+      // exclude most source shoulders/chest/civilian clothing.
+      let cropW = face.width * 2.45;
+      let cropH = face.height * 2.75;
+      cropW = Math.min(cropW, iw);
+      cropH = Math.min(cropH, ih);
+
+      let sx = faceCx - cropW / 2;
+      let sy = faceCy - face.height * 1.12;
+      sx = Math.max(0, Math.min(iw - cropW, sx));
+      sy = Math.max(0, Math.min(ih - cropH, sy));
+
+      const maxEdge = 896;
+      const scale = Math.min(1, maxEdge / Math.max(cropW, cropH));
+      const tw = Math.max(1, Math.round(cropW * scale));
+      const th = Math.max(1, Math.round(cropH * scale));
+
+      const canvas = document.createElement("canvas");
+      canvas.width = tw;
+      canvas.height = th;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return optimizeAiInputBlob(blob, 896);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(image, sx, sy, cropW, cropH, 0, 0, tw, th);
+
+      return await new Promise<Blob>((resolve) => {
+        canvas.toBlob(
+          (out) => resolve(out ?? blob),
+          "image/jpeg",
+          0.94,
+        );
+      });
+    } finally {
+      detector.close();
+    }
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
 export default function Home() {
   const inputRef = useRef<HTMLInputElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -513,7 +585,7 @@ export default function Home() {
   }
 
 
-  async function chromaKeyToTransparent(src: string, strict = false) {
+  async function chromaKeyToTransparent(src: string) {
     const image = await loadImage(src);
     const canvas = document.createElement("canvas");
     canvas.width = image.naturalWidth || image.width;
@@ -581,7 +653,7 @@ export default function Home() {
     const queue = new Int32Array(count);
     let head = 0;
     let tail = 0;
-    const joinDistance = strict ? 68 : 128;
+    const joinDistance = 128;
     const enqueue = (pixel: number) => {
       if (pixel < 0 || pixel >= count || connected[pixel]) return;
       if (colorDistance(pixel) > joinDistance) return;
@@ -612,8 +684,8 @@ export default function Home() {
     // anti-aliased hair/clothing fringe gets partial alpha.  For partial-alpha edge
     // pixels, mathematically remove the detected background colour (despill) so no
     // blue/purple/green halo remains when placed over the website's chosen colour.
-    const transparentDistance = strict ? 22 : 34;
-    const opaqueDistance = strict ? 88 : 132;
+    const transparentDistance = 34;
+    const opaqueDistance = 132;
     for (let pixel = 0; pixel < count; pixel++) {
       if (!connected[pixel]) continue;
       const i = pixel * 4;
@@ -717,7 +789,7 @@ export default function Home() {
   }
 
 
-  async function officialMagentaToTransparent(src: string) {
+  async function officialPersonToTransparent(src: string) {
     const image = await loadImage(src);
     const canvas = document.createElement("canvas");
     canvas.width = image.naturalWidth || image.width;
@@ -727,51 +799,127 @@ export default function Home() {
 
     ctx.drawImage(image, 0, 0);
     const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = pixels.data;
+    const d = pixels.data;
 
-    // IMPORTANT: official mode uses a deliberately flat #FF00FF temporary
-    // background.  Remove ONLY unmistakable magenta pixels.  Never estimate the
-    // background from face/skin colours and never modify RGB of retained pixels.
-    // This prevents cyan/blue/magenta skin contamination.
-    for (let i = 0; i < data.length; i += 4) {
-      const r = data[i];
-      const g = data[i + 1];
-      const b = data[i + 2];
+    // Official AI is instructed to return flat #FF00FF. Remove only obvious
+    // chroma/background colours. Never recolour retained skin/hair RGB.
+    for (let i = 0; i < d.length; i += 4) {
+      const r = d[i], g = d[i + 1], b = d[i + 2];
 
-      const magentaDominance = Math.min(r, b) - g;
-      const rbDifference = Math.abs(r - b);
+      const magenta =
+        r >= 145 &&
+        b >= 125 &&
+        g <= 125 &&
+        Math.min(r, b) - g >= 55;
 
-      // Flat / near-flat chroma: fully transparent.
-      if (
-        r >= 170 &&
+      // Safety fallback if the model unexpectedly returns the old blue/cyan
+      // background. These thresholds are deliberately far from human skin.
+      const blue =
         b >= 145 &&
-        g <= 105 &&
-        magentaDominance >= 75 &&
-        rbDifference <= 95
-      ) {
-        data[i + 3] = 0;
-        continue;
-      }
+        b - r >= 38 &&
+        b - g >= 12 &&
+        r <= 150;
 
-      // Only a very narrow anti-aliased fringe is faded.
-      // RGB is intentionally untouched so skin/hair colour cannot be shifted.
-      if (
-        r >= 135 &&
-        b >= 120 &&
-        g <= 135 &&
-        magentaDominance >= 48 &&
-        rbDifference <= 110
-      ) {
-        const strength = Math.max(
-          0,
-          Math.min(1, (magentaDominance - 48) / 45),
-        );
-        data[i + 3] = Math.round(data[i + 3] * (1 - strength));
+      const cyan =
+        g >= 130 &&
+        b >= 145 &&
+        b - r >= 30 &&
+        g - r >= 20;
+
+      if (magenta || blue || cyan) {
+        d[i + 3] = 0;
       }
     }
 
     ctx.putImageData(pixels, 0, 0);
     return canvas.toDataURL("image/png");
+  }
+
+  async function composeOfficialExactTemplate(
+    personSrc: string,
+    templateSrc: string,
+  ) {
+    const [{ FilesetResolver, FaceDetector }, person, template] =
+      await Promise.all([
+        import("@mediapipe/tasks-vision"),
+        loadImage(personSrc),
+        loadImage(templateSrc),
+      ]);
+
+    const vision = await FilesetResolver.forVisionTasks(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm",
+    );
+    const detector = await FaceDetector.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath:
+          "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/latest/blaze_face_short_range.tflite",
+      },
+      runningMode: "IMAGE",
+      minDetectionConfidence: 0.5,
+    });
+
+    try {
+      const face = detector.detect(person).detections[0]?.boundingBox;
+      if (!face) throw new Error("ไม่พบใบหน้าหลังประมวลผล");
+
+      const canvas = document.createElement("canvas");
+      canvas.width = 900;
+      canvas.height = 1200;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("รวมเทมเพลตข้าราชการไม่ได้");
+      ctx.clearRect(0, 0, 900, 1200);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+
+      // Fit the COMPLETE head/hair as one unit. This target is intentionally
+      // smaller than a close headshot and was chosen for the real official
+      // template shoulder width.
+      const targetFaceHeight = 205;
+      const targetFaceCenterX = 450;
+      const targetFaceCenterY = 310;
+      const scale = targetFaceHeight / Math.max(1, face.height);
+      const sourceFaceCenterX = face.originX + face.width / 2;
+      const sourceFaceCenterY = face.originY + face.height / 2;
+      const dx = targetFaceCenterX - sourceFaceCenterX * scale;
+      const dy = targetFaceCenterY - sourceFaceCenterY * scale;
+
+      ctx.drawImage(
+        person,
+        dx,
+        dy,
+        person.naturalWidth * scale,
+        person.naturalHeight * scale,
+      );
+
+      // Delete any accidental AI clothing/background below the jaw while
+      // keeping a natural centred neck. This is deterministic Canvas cleanup,
+      // not another AI call.
+      ctx.save();
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.fillStyle = "#000";
+      // Clear lower-left and lower-right zones; keep only a central neck path.
+      ctx.fillRect(0, 440, 365, 300);
+      ctx.fillRect(535, 440, 365, 300);
+      // Below the collar join no person pixels are allowed.
+      ctx.fillRect(0, 610, 900, 590);
+      ctx.restore();
+
+      // Exact real template: preserved pixel-for-pixel, only uniformly scaled
+      // and centred to leave safe left/right arm margins. No AI-created
+      // government-uniform pixels are used.
+      const templateScale = 0.93;
+      const tw = 900 * templateScale;
+      const th = 1200 * templateScale;
+      const tx = (900 - tw) / 2;
+      // Keep the template's top edge/collar height at the same visual level.
+      const originalTop = 524;
+      const ty = originalTop - originalTop * templateScale;
+      ctx.drawImage(template, tx, ty, tw, th);
+
+      return canvas.toDataURL("image/png");
+    } finally {
+      detector.close();
+    }
   }
 
   async function normalizeAiResultToThreeFour(src: string, backgroundColor = bg) {
@@ -843,90 +991,6 @@ export default function Home() {
     return canvas.toDataURL("image/png");
   }
 
-  async function composeOfficialExactTemplate(
-    personSrc: string,
-    templateSrc: string,
-  ) {
-    const [{ FilesetResolver, FaceDetector }, person, template] =
-      await Promise.all([
-        import("@mediapipe/tasks-vision"),
-        loadImage(personSrc),
-        loadImage(templateSrc),
-      ]);
-
-    const vision = await FilesetResolver.forVisionTasks(
-      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm",
-    );
-    const detector = await FaceDetector.createFromOptions(vision, {
-      baseOptions: {
-        modelAssetPath:
-          "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/latest/blaze_face_short_range.tflite",
-      },
-      runningMode: "IMAGE",
-      minDetectionConfidence: 0.5,
-    });
-
-    try {
-      const face = detector.detect(person).detections[0]?.boundingBox;
-      if (!face) throw new Error("ไม่พบใบหน้าหลังประมวลผล");
-
-      const canvas = document.createElement("canvas");
-      canvas.width = 900;
-      canvas.height = 1200;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) throw new Error("รวมเทมเพลตข้าราชการไม่ได้");
-      ctx.clearRect(0, 0, 900, 1200);
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
-
-      // PERSON FIT:
-      // The AI output for official uniforms contains ONLY the real person's
-      // head/hair/ears/neck.  Fit that head to the fixed collar geometry.
-      // This is a uniform transform of the whole head/hair unit; facial features
-      // are never scaled independently.
-      const targetFaceHeight = 220;
-      const targetFaceCenterX = 450;
-      const targetFaceCenterY = 330;
-      const personScale = targetFaceHeight / Math.max(1, face.height);
-      const sourceFaceCenterX = face.originX + face.width / 2;
-      const sourceFaceCenterY = face.originY + face.height / 2;
-      const personDrawX = targetFaceCenterX - sourceFaceCenterX * personScale;
-      const personDrawY = targetFaceCenterY - sourceFaceCenterY * personScale;
-
-      ctx.drawImage(
-        person,
-        personDrawX,
-        personDrawY,
-        person.naturalWidth * personScale,
-        person.naturalHeight * personScale,
-      );
-
-      // EXACT REAL TEMPLATE LAYER:
-      // Never use AI-generated uniform pixels.  The supplied PNG is the final
-      // uniform.  Scale the WHOLE template uniformly by 94% so both outer sleeve
-      // edges stay inside the 3:4 frame.  Preserve its top collar position.
-      const templateScale = 0.94;
-      const templateWidth = 900 * templateScale;
-      const templateHeight = 1200 * templateScale;
-      const templateX = (900 - templateWidth) / 2;
-      // Original first visible uniform pixels begin around y=526. Keep that
-      // collar/shoulder height stable while creating left/right arm margins.
-      const templateY = 526 - 526 * templateScale;
-
-      ctx.drawImage(
-        template,
-        templateX,
-        templateY,
-        templateWidth,
-        templateHeight,
-      );
-
-      return canvas.toDataURL("image/png");
-    } finally {
-      detector.close();
-    }
-  }
-
   async function aiEdit() {
     if (!aiSelected.length) {
       setProcessMessage("กรุณาเลือกอย่างน้อย 1 รายการ");
@@ -940,28 +1004,19 @@ export default function Home() {
     );
     try {
       const isOfficialTemplate = outfit.id.startsWith("official-");
-
-      // COST RULE:
-      // Official uniforms are composited locally from the exact real PNG
-      // template after the AI call. Therefore the government-uniform image is
-      // NOT uploaded to OpenAI at all. Sending it was redundant, expensive
-      // high-fidelity image input and could also encourage the model to redraw
-      // the uniform even though those generated pixels are discarded later.
       const source = await fetch(baseOriginal);
       const sourceBlob = await source.blob();
 
-      // Preserve face fidelity. Only downscale oversized phone-camera input;
-      // never crop or change aspect ratio.
-      const blob = await optimizeAiInputBlob(
-        sourceBlob,
-        isOfficialTemplate ? 1280 : 1536,
-      );
+      // Official mode sends only a focused head/hair/neck crop to AI.
+      // The real uniform template never enters the paid request.
+      const blob = isOfficialTemplate
+        ? await prepareOfficialPortraitInputBlob(sourceBlob)
+        : await optimizeAiInputBlob(sourceBlob, 1536);
 
       const form = new FormData();
       form.append("image", blob, "portrait.png");
 
-      // Non-official/job-application mode still needs the clothing reference
-      // exactly as before. Official mode intentionally skips this API input.
+      // All existing non-official/job-application behaviour remains unchanged.
       if (!isOfficialTemplate) {
         const outfitSource = await fetch(outfit.image);
         const outfitSourceBlob = await outfitSource.blob();
@@ -984,7 +1039,7 @@ export default function Home() {
         const hairstyleSourceBlob = await hairstyleSource.blob();
         const hairstyleBlob = await optimizeAiInputBlob(
           hairstyleSourceBlob,
-          isOfficialTemplate ? 1024 : 1280,
+          isOfficialTemplate ? 640 : 1280,
         );
         form.append("hairstyleRef", hairstyleBlob, `${hairstyle}.png`);
       }
@@ -995,16 +1050,22 @@ export default function Home() {
       const data = (await response.json()) as {
         image?: string;
         error?: string;
+        usage?: unknown;
       };
       if (!response.ok || !data.image)
         throw new Error(data.error || "AI ปรับภาพไม่สำเร็จ");
-      const transparentPerson = isOfficialTemplate
-        ? await officialMagentaToTransparent(data.image)
-        : await chromaKeyToTransparent(data.image);
+      if (data.usage) {
+        console.info("[PhotoID AI usage]", data.usage);
+      }
       const normalizedImage = isOfficialTemplate
-        ? await composeOfficialExactTemplate(transparentPerson, outfit.image)
-        : await normalizeAiResultToThreeFour(transparentPerson, bg);
-
+        ? await composeOfficialExactTemplate(
+            await officialPersonToTransparent(data.image),
+            outfit.image,
+          )
+        : await normalizeAiResultToThreeFour(
+            await chromaKeyToTransparent(data.image),
+            bg,
+          );
       setOriginal(normalizedImage);
       setZoom(100);
       setX(0);
@@ -1015,8 +1076,8 @@ export default function Home() {
       setBefore(false);
       void prepareComparison(baseOriginal, normalizedImage);
       setProcessMessage(
-        isOfficialTemplate
-          ? "สำเร็จ — ใช้เทมเพลตชุดข้าราชการจริง 100% และ AI ปรับเฉพาะคน/คอ/ทรงผม"
+        outfit.id.startsWith("official-")
+          ? "สำเร็จ — ใช้เทมเพลตชุดข้าราชการจริง และปรับคน/คอให้สมดุล"
           : "AI ปรับภาพแบบ V3 สำเร็จแล้ว",
       );
     } catch (e) {
