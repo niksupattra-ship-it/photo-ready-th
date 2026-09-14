@@ -1667,24 +1667,31 @@ export default function Home() {
       // just because the template opening is narrow.
       const anatomicalNeckWidth =
         scaledFaceWidth * (isMale ? 0.49 : 0.46);
+
+      // COLLAR-FILL RULE:
+      // The visible neck must actually fill the real template opening.
+      // Use the measured collar opening as the minimum lower-neck target,
+      // while still respecting anatomy so the neck never becomes a straight
+      // rectangular block.
       const collarDrivenNeckWidth =
-        finalCollarWidth * (isMale ? 0.88 : 0.84);
+        finalCollarWidth * (isMale ? 0.96 : 0.94);
 
       const targetNeckWidth = Math.max(
-        isMale ? 86 : 78,
+        isMale ? 88 : 80,
         Math.min(
-          isMale ? 124 : 112,
-          anatomicalNeckWidth * 0.68 +
-            collarDrivenNeckWidth * 0.32,
+          isMale ? 128 : 116,
+          Math.max(
+            anatomicalNeckWidth,
+            collarDrivenNeckWidth,
+          ),
         ),
       );
 
-      // Approved reference has a natural, not elongated, neck.
-      // Keep the neck shorter than the old 0.40-face-height value and overlap
-      // the lower neck behind the real collar for a photographic join.
+      // Natural neck length, with enough overlap below the real collar so no
+      // blue/background gap can remain between skin and uniform.
       const targetNeckLength =
         scaledFaceHeight * (isMale ? 0.34 : 0.35);
-      const underCollarOverlap = isMale ? 14 : 18;
+      const underCollarOverlap = isMale ? 22 : 26;
 
       const targetJawY =
         finalCollarY -
@@ -1704,11 +1711,77 @@ export default function Home() {
         sourceJawY * personScale;
 
       // ------------------------------------------------------------
-      // Draw the COMPLETE AI person layer with one uniform transform.
-      // No post-AI geometric mask is allowed here. The previous jaw-height
-      // rectangle + narrow neck corridor physically clipped long hairstyles
-      // and produced the pasted/cut appearance. The AI output is already
-      // chroma-keyed to head + complete hair + ears + neck only.
+      // Measure the ACTUAL AI neck width below the jaw.
+      // This is the missing piece from previous versions: we were estimating
+      // neck width from face size but never checking how wide the generated
+      // neck really was.
+      // ------------------------------------------------------------
+      const patchMeasure = document.createElement("canvas");
+      patchMeasure.width = aiPatch.naturalWidth || aiPatch.width;
+      patchMeasure.height = aiPatch.naturalHeight || aiPatch.height;
+      const patchMeasureCtx = patchMeasure.getContext("2d", {
+        willReadFrequently: true,
+      });
+      if (!patchMeasureCtx) throw new Error("วัดความกว้างคอ AI ไม่ได้");
+      patchMeasureCtx.drawImage(aiPatch, 0, 0);
+
+      const patchPixels = patchMeasureCtx.getImageData(
+        0,
+        0,
+        patchMeasure.width,
+        patchMeasure.height,
+      );
+      const patchData = patchPixels.data;
+
+      const measureNeckWidthAt = (y: number) => {
+        const yy = Math.max(
+          0,
+          Math.min(patchMeasure.height - 1, Math.round(y)),
+        );
+        const center = Math.round(sourceFaceCenterX);
+
+        let left = center;
+        while (left > 0) {
+          const a = patchData[(yy * patchMeasure.width + left - 1) * 4 + 3];
+          if (a <= 24) break;
+          left--;
+        }
+
+        let right = center;
+        while (right < patchMeasure.width - 1) {
+          const a = patchData[(yy * patchMeasure.width + right + 1) * 4 + 3];
+          if (a <= 24) break;
+          right++;
+        }
+
+        return Math.max(1, right - left + 1);
+      };
+
+      const neckSampleY1 =
+        sourceJawY + face.height * 0.16;
+      const neckSampleY2 =
+        sourceJawY + face.height * 0.30;
+
+      const measuredAiNeckWidth =
+        (measureNeckWidthAt(neckSampleY1) +
+          measureNeckWidthAt(neckSampleY2)) /
+        2;
+
+      const renderedAiNeckWidth =
+        measuredAiNeckWidth * personScale;
+
+      // Expand only the neck region when the generated neck is narrower than
+      // the measured real collar opening. Never shrink a natural wider neck.
+      const neckHorizontalScale = Math.max(
+        1,
+        Math.min(
+          1.28,
+          targetNeckWidth / Math.max(1, renderedAiNeckWidth),
+        ),
+      );
+
+      // ------------------------------------------------------------
+      // 1) Draw the COMPLETE head/hair/neck normally.
       // ------------------------------------------------------------
       ctx.drawImage(
         aiPatch,
@@ -1717,6 +1790,90 @@ export default function Home() {
         (aiPatch.naturalWidth || aiPatch.width) * personScale,
         (aiPatch.naturalHeight || aiPatch.height) * personScale,
       );
+
+      // ------------------------------------------------------------
+      // 2) Redraw ONLY the jaw-to-collar neck strip with a soft anatomical
+      //    horizontal expansion. The face and hair are untouched.
+      //    This fills the collar opening without creating a rectangular neck.
+      // ------------------------------------------------------------
+      if (neckHorizontalScale > 1.005) {
+        const neckLayer = document.createElement("canvas");
+        neckLayer.width = 900;
+        neckLayer.height = 1200;
+        const neckLayerCtx = neckLayer.getContext("2d");
+        if (!neckLayerCtx) throw new Error("ปรับความกว้างคอไม่ได้");
+
+        neckLayerCtx.imageSmoothingEnabled = true;
+        neckLayerCtx.imageSmoothingQuality = "high";
+
+        neckLayerCtx.save();
+        neckLayerCtx.translate(finalShoulderCenterX, 0);
+        neckLayerCtx.scale(neckHorizontalScale, 1);
+        neckLayerCtx.translate(-finalShoulderCenterX, 0);
+        neckLayerCtx.drawImage(
+          aiPatch,
+          dx,
+          dy,
+          (aiPatch.naturalWidth || aiPatch.width) * personScale,
+          (aiPatch.naturalHeight || aiPatch.height) * personScale,
+        );
+        neckLayerCtx.restore();
+
+        // Feathered neck-only mask. Starts just below the jaw and widens
+        // smoothly toward the collar opening.
+        const neckMask = document.createElement("canvas");
+        neckMask.width = 900;
+        neckMask.height = 1200;
+        const neckMaskCtx = neckMask.getContext("2d");
+        if (!neckMaskCtx) throw new Error("สร้าง mask คอไม่ได้");
+
+        neckMaskCtx.filter = "blur(5px)";
+        neckMaskCtx.fillStyle = "#fff";
+
+        const topHalf =
+          scaledFaceWidth * (isMale ? 0.25 : 0.23);
+        const bottomHalf =
+          targetNeckWidth / 2;
+
+        neckMaskCtx.beginPath();
+        neckMaskCtx.moveTo(
+          finalShoulderCenterX - topHalf,
+          targetJawY - 2,
+        );
+        neckMaskCtx.lineTo(
+          finalShoulderCenterX + topHalf,
+          targetJawY - 2,
+        );
+        neckMaskCtx.bezierCurveTo(
+          finalShoulderCenterX + topHalf * 0.95,
+          targetJawY + targetNeckLength * 0.35,
+          finalShoulderCenterX + bottomHalf,
+          finalCollarY - 18,
+          finalShoulderCenterX + bottomHalf,
+          finalCollarY + underCollarOverlap,
+        );
+        neckMaskCtx.lineTo(
+          finalShoulderCenterX - bottomHalf,
+          finalCollarY + underCollarOverlap,
+        );
+        neckMaskCtx.bezierCurveTo(
+          finalShoulderCenterX - bottomHalf,
+          finalCollarY - 18,
+          finalShoulderCenterX - topHalf * 0.95,
+          targetJawY + targetNeckLength * 0.35,
+          finalShoulderCenterX - topHalf,
+          targetJawY - 2,
+        );
+        neckMaskCtx.closePath();
+        neckMaskCtx.fill();
+        neckMaskCtx.filter = "none";
+
+        neckLayerCtx.globalCompositeOperation = "destination-in";
+        neckLayerCtx.drawImage(neckMask, 0, 0);
+        neckLayerCtx.globalCompositeOperation = "source-over";
+
+        ctx.drawImage(neckLayer, 0, 0);
+      }
 
       // ...then the exact REAL template on top. This hides the lower neck under
       // the collar naturally. No AI-generated shoulder board, insignia, ribbon,
