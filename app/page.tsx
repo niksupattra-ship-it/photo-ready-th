@@ -594,6 +594,55 @@ export default function Home() {
       }
     }
 
+    // Final chroma-fringe cleanup. The AI sometimes leaves a thin magenta halo
+    // (#FF00FF spill) just OUTSIDE the true hair/clothing edge. Those pixels can
+    // survive the background flood-fill because they are too far from the detected
+    // blue/flat background colour. Remove ONLY strong magenta pixels that sit within
+    // a few pixels of transparency; interior face/skin/hair/suit pixels are untouched.
+    const alphaSnapshot = new Uint8ClampedArray(count);
+    for (let pixel = 0; pixel < count; pixel++) alphaSnapshot[pixel] = data[pixel * 4 + 3];
+
+    const nearTransparent = (x: number, y: number, radius = 4) => {
+      const x0 = Math.max(0, x - radius);
+      const x1 = Math.min(width - 1, x + radius);
+      const y0 = Math.max(0, y - radius);
+      const y1 = Math.min(height - 1, y + radius);
+      for (let yy = y0; yy <= y1; yy++) {
+        for (let xx = x0; xx <= x1; xx++) {
+          if (alphaSnapshot[yy * width + xx] <= 12) return true;
+        }
+      }
+      return false;
+    };
+
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const pixel = y * width + x;
+        const i = pixel * 4;
+        const a = data[i + 3];
+        if (a <= 12 || !nearTransparent(x, y, 4)) continue;
+
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const magentaStrength = Math.min(r, b) - g;
+        const rbBalance = Math.abs(r - b);
+
+        // Strong magenta/cyclamen spill: remove it completely when it hugs the edge.
+        if (r > 95 && b > 95 && magentaStrength > 58 && rbBalance < 115) {
+          data[i + 3] = 0;
+          continue;
+        }
+
+        // Softer magenta anti-alias fringe: fade alpha only. Do not repaint RGB, so
+        // natural hair/skin/clothing colour remains exactly as generated.
+        if (r > 80 && b > 80 && magentaStrength > 34 && rbBalance < 130) {
+          const fade = Math.max(0.08, Math.min(1, 1 - (magentaStrength - 34) / 70));
+          data[i + 3] = Math.round(a * fade);
+        }
+      }
+    }
+
     ctx.putImageData(pixels, 0, 0);
     return canvas.toDataURL("image/png");
   }
