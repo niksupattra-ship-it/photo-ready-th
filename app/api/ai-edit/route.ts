@@ -124,8 +124,11 @@ Keep the entire hairstyle and head fully inside the square output. Leave at leas
 
 Do NOT include source shirt/blouse/neckline/shoulders. Do NOT include any government-uniform pixels. Below the natural neck base must be only #FF00FF.
 
+NECK LENGTH / JOIN REQUIREMENT:
+The website will place the real uniform collar over the LOWER part of this neck. Therefore keep a COMPLETE natural neck extending clearly below the jaw all the way to its anatomical base; do not terminate the neck immediately under the chin and do not include clavicles/shoulders. The lower 15–20% of the visible neck is intentionally allowed to sit behind the real collar template so the final result has a natural overlap instead of a cut-and-paste seam.
+
 HEAD / NECK PROPORTION:
-Keep the whole head+hair unit naturally small enough for a formal half-body government portrait; do not enlarge the head. The website will fit this person to a fixed real uniform template, so provide a naturally proportioned head rather than a close-up headshot. Preserve internal facial proportions exactly. Neck length should remain anatomically natural (roughly 0.33–0.50 head length where appropriate), centred below the jaw, with smooth continuous skin from jaw to neck base. No triangular skin wedges, no detached neck, no hard horizontal cut, no pasted-head appearance.
+Keep the whole head+hair unit naturally small enough for a formal half-body government portrait; do not enlarge the head. The website will fit this person to a fixed real uniform template, so provide a naturally proportioned head rather than a close-up headshot. Preserve internal facial proportions exactly. Neck length should remain anatomically natural (roughly 0.33–0.50 head length where appropriate), centred below the jaw, with smooth continuous skin from jaw to neck base. No triangular skin wedges, no detached neck, no hard horizontal cut, no pasted-head appearance. Keep the jaw-to-neck transition continuous and realistic, and keep the neck narrower than the head while remaining anatomically proportional.
 
 ${skinInstruction || "Preserve the original skin tone, lighting and real skin texture."}
 ${chosen.filter((_, index)=>operations[index]!=="shoulders").join(" ")}
