@@ -906,56 +906,83 @@ export default function Home() {
       load(shownSrc),
       load(outfit.image),
     ]);
+    const EXPORT_SCALE = 2.5;
+    const EXPORT_WIDTH = Math.round(900 * EXPORT_SCALE);   // 2250 px
+    const EXPORT_HEIGHT = Math.round(1200 * EXPORT_SCALE); // 3000 px
+
     const canvas = document.createElement("canvas");
-    canvas.width = 900;
-    canvas.height = 1200;
+    canvas.width = EXPORT_WIDTH;
+    canvas.height = EXPORT_HEIGHT;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+
+    // Render directly at 2.5x resolution instead of creating 900x1200 first
+    // and enlarging afterward. This preserves the maximum detail available
+    // from the AI/source image and keeps all geometry identical.
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
     ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, 900, 1200);
+    ctx.fillRect(0, 0, EXPORT_WIDTH, EXPORT_HEIGHT);
+
     const scale =
-      Math.min(900 / person.width, 1200 / person.height) *
+      Math.min(EXPORT_WIDTH / person.width, EXPORT_HEIGHT / person.height) *
       (zoom / 100);
     const pw = person.width * scale,
       ph = person.height * scale;
     const previewWidth = stageRef.current?.clientWidth || 450;
     const previewHeight = stageRef.current?.clientHeight || 600;
-    const exportX = x * (900 / previewWidth);
-    const exportY = y * (1200 / previewHeight);
+    const exportX = x * (EXPORT_WIDTH / previewWidth);
+    const exportY = y * (EXPORT_HEIGHT / previewHeight);
+
     ctx.filter = `brightness(${100 + skin}%)`;
     ctx.drawImage(
       person,
-      (900 - pw) / 2 + exportX,
-      (1200 - ph) / 2 + exportY,
+      (EXPORT_WIDTH - pw) / 2 + exportX,
+      (EXPORT_HEIGHT - ph) / 2 + exportY,
       pw,
       ph,
     );
     ctx.filter = "none";
+
     if (!aiComposited) {
-      const cw = 972 * (1 + neck / 100),
+      const cw = 972 * EXPORT_SCALE * (1 + neck / 100),
         ch = cloth.height * (cw / cloth.width);
-      ctx.drawImage(cloth, (900 - cw) / 2, 1200 - ch + 330 + hair * 2, cw, ch);
+      ctx.drawImage(
+        cloth,
+        (EXPORT_WIDTH - cw) / 2,
+        EXPORT_HEIGHT - ch + (330 + hair * 2) * EXPORT_SCALE,
+        cw,
+        ch,
+      );
     }
-    // Export-only micro sharpening: restore fine detail softened by resize/compositing.
-    // No AI call and no changes to geometry, face, skin tone, hair, outfit, background,
-    // framing, zoom, or alpha edges.
+
+    // Export-only high-resolution micro sharpening.
+    // No AI call and no changes to face geometry, skin tone, hair, outfit,
+    // background, framing, zoom or alpha edges.
     const sharpened = document.createElement("canvas");
-    sharpened.width = 900;
-    sharpened.height = 1200;
+    sharpened.width = EXPORT_WIDTH;
+    sharpened.height = EXPORT_HEIGHT;
     const sharpenedCtx = sharpened.getContext("2d", { willReadFrequently: true });
     if (!sharpenedCtx) return;
+    sharpenedCtx.imageSmoothingEnabled = true;
+    sharpenedCtx.imageSmoothingQuality = "high";
 
     sharpenedCtx.drawImage(canvas, 0, 0);
-    const source = sharpenedCtx.getImageData(0, 0, 900, 1200);
+    const source = sharpenedCtx.getImageData(
+      0,
+      0,
+      EXPORT_WIDTH,
+      EXPORT_HEIGHT,
+    );
     const src = source.data;
     const out = new Uint8ClampedArray(src);
 
-    // Conservative local unsharp mask: enough for camera-like micro-contrast,
-    // capped to avoid halos and artificial skin texture.
-    const strength = 0.18;
-    const maxDelta = 10;
-    const width = 900;
-    const height = 1200;
+    // Slightly gentler sharpening at 2.5x resolution to keep pores, hair and
+    // fabric natural while improving fine-edge clarity without halos.
+    const strength = 0.12;
+    const maxDelta = 8;
+    const width = EXPORT_WIDTH;
+    const height = EXPORT_HEIGHT;
 
     for (let yy = 1; yy < height - 1; yy++) {
       for (let xx = 1; xx < width - 1; xx++) {
@@ -981,7 +1008,7 @@ export default function Home() {
     sharpenedCtx.putImageData(source, 0, 0);
 
     const a = document.createElement("a");
-    a.href = sharpened.toDataURL("image/jpeg", 0.98);
+    a.href = sharpened.toDataURL("image/jpeg", 0.995);
     a.download = "รูปพร้อมใช้.jpg";
     a.click();
   }
