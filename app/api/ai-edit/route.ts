@@ -137,8 +137,8 @@ Create a continuous natural neck from the unchanged LOCKED jaw into the visible 
 Use the locked face width and the visible collar opening to choose a realistic neck width.
 Keep the neck centered and anatomically continuous; do not expose shoulders or civilian clothing.
 Neck length should generally be about 0.33–0.50 of head length where anatomically appropriate.
-Extend the lower neck far enough behind the collar so the real template can overlap it naturally in final compositing.
-No blue/magenta gap, no floating head, no detached neck, no triangular skin wedge, no horizontal cut line and no pasted-head seam.
+The neck is not optional: generate continuous real skin from the locked jaw all the way down BEHIND the tie/collar opening. The entire visible central opening between the two collar points must contain natural neck skin wherever anatomy requires it; never leave chroma/background between jaw and collar. Extend the lower neck well behind the real collar so final template overlap hides the join.
+No blue/magenta/cyan gap, no floating head, no detached neck, no triangular background wedge, no horizontal cut line and no pasted-head seam.
 
 COLLAR PERMISSION — LIMITED:
 If the fixed collar opening is slightly too narrow/wide for the natural neck, you MAY adjust ONLY the immediate inner collar contact edge inside the mask by the minimum amount required for a natural fit. Preserve the original collar design, lapels, tie and every official detail. Never change the outer uniform silhouette or camera distance.
@@ -152,7 +152,7 @@ HAIR EDGE:
 Keep the complete hairstyle inside the frame with natural fine strands and soft edges. No clipping, halo, glow, magenta/blue/cyan fringe, rectangular residue or hard cutout line.
 
 SKIN / LIGHT:
-${skinInstruction || "Preserve the original skin tone, lighting and natural skin texture."}
+Preserve the source face/skin exactly: same tone, pores, texture, highlights, shadows and camera-like detail. Do not beautify, smooth, whiten, recolor, relight, retouch or alter facial structure. Only newly generated neck pixels should match the source skin naturally.
 ${chosen.filter((_, index)=>operations[index]!=="shoulders").join(" ")}
 ${volumeInstruction}
 
