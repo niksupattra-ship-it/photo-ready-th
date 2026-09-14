@@ -33,7 +33,7 @@ const outfits = [
   { id: "job-men-open", label: "สูทชายคอเปิด", sub: "สมัครงาน", category: "สมัครงาน", image: "/templates/job-navy-suit-tie-men.png", tone: "suit" },
   { id: "job-white-women", label: "เสื้อขาวหญิง", sub: "สมัครงาน", category: "สมัครงาน", image: "/templates/job-white-shirt-women.png", tone: "student" },
   { id: "job-white-men", label: "เสื้อขาวชาย", sub: "สมัครงาน", category: "สมัครงาน", image: "/templates/job-white-shirt-men.png", tone: "student" },
-  { id: "official-female-practitioner-finance", label: "ปฏิบัติการหญิง", sub: "กระทรวงการคลัง", category: "ข้าราชการ", image: "/templates/official-female-practitioner-finance.png", tone: "official", compose: "template" as const },
+  { id: "official-female-practitioner-finance", label: "ปฏิบัติการหญิง", sub: "กระทรวงการคลัง", category: "ข้าราชการ", image: "/templates/official-female-practitioner-finance.png", tone: "official" },
   { id: "women-suit", label: "สูทหญิง", sub: "ข้าราชการ", category: "ข้าราชการ", image: "/templates/women-suit.png", tone: "suit" },
   { id: "men-suit", label: "สูทชาย", sub: "ข้าราชการ", category: "ข้าราชการ", image: "/templates/men-suit.png", tone: "suit" },
   { id: "women-student", label: "นักเรียนหญิง", sub: "นักเรียน", category: "นักเรียน", image: "/templates/women-student.png", tone: "student" },
@@ -745,309 +745,17 @@ export default function Home() {
     return canvas.toDataURL("image/png");
   }
 
-  async function composeOfficialTemplate() {
-    if (!hasUploadedImage) {
-      setProcessMessage("กรุณาเลือกรูปก่อน");
-      return;
-    }
-    setAiProcessing(true);
-    setProcessMessage("กำลังวัดสัดส่วนศีรษะและจัดเข้ากับชุดจริง…");
-    try {
-      const [{ FilesetResolver, FaceDetector }, sourceImage, templateImage] =
-        await Promise.all([
-          import("@mediapipe/tasks-vision"),
-          loadImage(baseOriginal),
-          loadImage(outfit.image),
-        ]);
-
-      const vision = await FilesetResolver.forVisionTasks(
-        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm",
-      );
-      const detector = await FaceDetector.createFromOptions(vision, {
-        baseOptions: {
-          modelAssetPath:
-            "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/latest/blaze_face_short_range.tflite",
-        },
-        runningMode: "IMAGE",
-        minDetectionConfidence: 0.55,
-      });
-      const face = detector.detect(sourceImage).detections[0]?.boundingBox;
-      detector.close();
-      if (!face) {
-        throw new Error("ไม่พบใบหน้า กรุณาใช้รูปหน้าตรงที่เห็นใบหน้าชัด");
-      }
-
-      // Government uniform itself is deterministic and locked. AI will be used later only inside a small neck/collar mask.
-      const personCutoutSrc = await makeTransparentCutout(baseOriginal);
-      const personImage = await loadImage(personCutoutSrc);
-
-      const canvas = document.createElement("canvas");
-      canvas.width = 900;
-      canvas.height = 1200;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) throw new Error("เปิดพื้นที่จัดภาพไม่ได้");
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
-
-      // One shared official-photo geometry for every level/ministry template:
-      // fixed 3:4 garment placement; only the uploaded head/neck is fitted to it.
-      // Derive the person's scale from the REAL template geometry, not from
-      // the uploaded photo.  This first official template has a ~94 px neck
-      // opening near y=620; a natural female face is about 2.45x that width.
-      // Future official templates can use the same metadata pattern.
-      const templateCollarCenterX = 450;
-      const templateCollarJoinY = 620;
-      const templateNeckOpeningWidth = 94;
-      const targetFaceWidth = templateNeckOpeningWidth * 2.45;
-      const targetFaceCenterX = templateCollarCenterX;
-      const targetFaceCenterY = 310;
-      const scale = targetFaceWidth / face.width;
-      const targetFaceHeight = face.height * scale;
-      const sourceFaceCenterX = face.originX + face.width / 2;
-      const sourceFaceCenterY = face.originY + face.height / 2;
-      const drawX = targetFaceCenterX - sourceFaceCenterX * scale;
-      const drawY = targetFaceCenterY - sourceFaceCenterY * scale;
-
-      // Keep ONLY the uploaded head/hair/neck. Never carry the original
-      // shoulders, blouse or torso into an official-uniform composition.
-      //
-      // The previous wide rectangular clip allowed the source shirt/shoulders
-      // to remain visible through the template's neck opening. Use a two-zone
-      // anatomical mask instead:
-      //   1) head + hair around the face
-      //   2) a narrow neck corridor that reaches the uniform collar
-      //
-      // This is deterministic Canvas compositing only; no AI/generative edit.
-      const headHalfWidth = Math.max(190, targetFaceWidth * 0.92);
-      const headTop = Math.max(25, targetFaceCenterY - targetFaceHeight * 1.05);
-      const headBottom = targetFaceCenterY + targetFaceHeight * 0.92;
-
-      ctx.save();
-      ctx.beginPath();
-
-      // Head/hair zone. Rounded shape leaves enough room for natural hair while
-      // excluding uploaded shoulders and chest.
-      const headLeft = targetFaceCenterX - headHalfWidth;
-      const headRight = targetFaceCenterX + headHalfWidth;
-      const headWidth = headRight - headLeft;
-      const headHeight = headBottom - headTop;
-      ctx.ellipse(
-        targetFaceCenterX,
-        headTop + headHeight * 0.52,
-        headWidth * 0.52,
-        headHeight * 0.58,
-        0,
-        0,
-        Math.PI * 2,
-      );
-
-      // Neck corridor. It is intentionally narrow so source clothing cannot
-      // leak into the collar opening. The lower width is tuned to the shared
-      // official-template collar geometry used by every rank/ministry.
-      const neckTopY = targetFaceCenterY + targetFaceHeight * 0.58;
-      const neckBottomY = 655;
-      const neckTopHalf = Math.max(78, targetFaceWidth * 0.26);
-      const neckBottomHalf = Math.max(62, targetFaceWidth * 0.21);
-      ctx.moveTo(targetFaceCenterX - neckTopHalf, neckTopY);
-      ctx.lineTo(targetFaceCenterX + neckTopHalf, neckTopY);
-      ctx.lineTo(targetFaceCenterX + neckBottomHalf, neckBottomY);
-      ctx.lineTo(targetFaceCenterX - neckBottomHalf, neckBottomY);
-      ctx.closePath();
-
-      ctx.clip();
-      ctx.drawImage(
-        personImage,
-        drawX,
-        drawY,
-        personImage.naturalWidth * scale,
-        personImage.naturalHeight * scale,
-      );
-      ctx.restore();
-
-      // Exact real uniform template: never regenerated, warped, stretched or
-      // re-designed. All future official templates use this same 3:4 placement.
-      ctx.drawImage(templateImage, 0, 0, 900, 1200);
-
-      // The full 900x1200 composition is now FINAL geometry.  Never send the
-      // whole official photo through the image model, because that can reframe
-      // the uniform, fill transparent background, or crop the real template.
-      // Instead send ONLY a square neck/collar patch to AI, then paste back
-      // ONLY the small masked neck region.
-      const baseComposite = canvas.toDataURL("image/png");
-
-      setProcessMessage("กำลังปรับเฉพาะคอและรอยต่อปกเสื้อให้สมดุล…");
-
-      const patchX = 245;
-      const patchY = 365;
-      const patchW = 410;
-      const patchH = 410;
-      const patchSize = 512;
-
-      const patchCanvas = document.createElement("canvas");
-      patchCanvas.width = patchSize;
-      patchCanvas.height = patchSize;
-      const patchCtx = patchCanvas.getContext("2d");
-      if (!patchCtx) throw new Error("สร้างพื้นที่ปรับคอไม่ได้");
-      patchCtx.imageSmoothingEnabled = true;
-      patchCtx.imageSmoothingQuality = "high";
-      patchCtx.drawImage(
-        canvas,
-        patchX,
-        patchY,
-        patchW,
-        patchH,
-        0,
-        0,
-        patchSize,
-        patchSize,
-      );
-
-      // API edit mask: black/opaque = locked, transparent = editable.
-      const maskCanvas = document.createElement("canvas");
-      maskCanvas.width = patchSize;
-      maskCanvas.height = patchSize;
-      const maskCtx = maskCanvas.getContext("2d");
-      if (!maskCtx) throw new Error("สร้าง mask คอไม่ได้");
-      maskCtx.fillStyle = "rgba(0,0,0,1)";
-      maskCtx.fillRect(0, 0, patchSize, patchSize);
-      maskCtx.globalCompositeOperation = "destination-out";
-
-      const toPatchX = (x: number) => ((x - patchX) / patchW) * patchSize;
-      const toPatchY = (y: number) => ((y - patchY) / patchH) * patchSize;
-
-      // Editable area begins below the jaw and ends just inside the collar.
-      // Face, hair, epaulettes, pins, ribbons, tie and the rest of the uniform
-      // are outside this zone and can never be replaced.
-      const editCenterX = templateCollarCenterX;
-      const editTopY = Math.max(
-        targetFaceCenterY + targetFaceHeight * 0.54,
-        430,
-      );
-      const editBottomY = 650;
-      const editTopHalf = Math.max(62, targetFaceWidth * 0.25);
-      const editBottomHalf = Math.max(78, targetFaceWidth * 0.32);
-
-      maskCtx.beginPath();
-      maskCtx.moveTo(
-        toPatchX(editCenterX - editTopHalf),
-        toPatchY(editTopY),
-      );
-      maskCtx.quadraticCurveTo(
-        toPatchX(editCenterX - editBottomHalf),
-        toPatchY((editTopY + editBottomY) / 2),
-        toPatchX(editCenterX - editBottomHalf),
-        toPatchY(editBottomY),
-      );
-      maskCtx.lineTo(
-        toPatchX(editCenterX + editBottomHalf),
-        toPatchY(editBottomY),
-      );
-      maskCtx.quadraticCurveTo(
-        toPatchX(editCenterX + editBottomHalf),
-        toPatchY((editTopY + editBottomY) / 2),
-        toPatchX(editCenterX + editTopHalf),
-        toPatchY(editTopY),
-      );
-      maskCtx.closePath();
-      maskCtx.fill();
-
-      const [patchResponse, maskResponse] = await Promise.all([
-        fetch(patchCanvas.toDataURL("image/png")),
-        fetch(maskCanvas.toDataURL("image/png")),
-      ]);
-      const [patchBlob, maskBlob] = await Promise.all([
-        patchResponse.blob(),
-        maskResponse.blob(),
-      ]);
-
-      const blendForm = new FormData();
-      blendForm.append("image", patchBlob, "official-neck-patch.png");
-      blendForm.append("mask", maskBlob, "official-neck-mask.png");
-
-      const blendResponse = await fetch("/api/official-neck-blend", {
-        method: "POST",
-        body: blendForm,
-      });
-      const blendData = (await blendResponse.json()) as {
-        image?: string;
-        error?: string;
-      };
-
-      if (!blendResponse.ok || !blendData.image) {
-        throw new Error(
-          blendData.error || "ปรับคอและรอยต่อปกเสื้อไม่สำเร็จ",
-        );
-      }
-
-      const aiPatch = await loadImage(blendData.image);
-
-      // Composite ONLY the neck mask back into the untouched 3:4 original.
-      // This guarantees the real template, transparent outer background and
-      // complete garment framing remain pixel-for-pixel unchanged.
-      const resultCanvas = document.createElement("canvas");
-      resultCanvas.width = 900;
-      resultCanvas.height = 1200;
-      const resultCtx = resultCanvas.getContext("2d");
-      if (!resultCtx) throw new Error("รวมภาพชุดข้าราชการไม่ได้");
-      resultCtx.drawImage(canvas, 0, 0);
-
-      resultCtx.save();
-      resultCtx.beginPath();
-      resultCtx.moveTo(editCenterX - editTopHalf, editTopY);
-      resultCtx.quadraticCurveTo(
-        editCenterX - editBottomHalf,
-        (editTopY + editBottomY) / 2,
-        editCenterX - editBottomHalf,
-        editBottomY,
-      );
-      resultCtx.lineTo(editCenterX + editBottomHalf, editBottomY);
-      resultCtx.quadraticCurveTo(
-        editCenterX + editBottomHalf,
-        (editTopY + editBottomY) / 2,
-        editCenterX + editTopHalf,
-        editTopY,
-      );
-      resultCtx.closePath();
-      resultCtx.clip();
-      resultCtx.imageSmoothingEnabled = true;
-      resultCtx.imageSmoothingQuality = "high";
-      resultCtx.drawImage(aiPatch, patchX, patchY, patchW, patchH);
-      resultCtx.restore();
-
-      const result = resultCanvas.toDataURL("image/png");
-      setOriginal(result);
-      setAiBaseImage(result);
-      setAiComposited(true);
-      setCutout(null);
-      setZoom(100);
-      setX(0);
-      setY(0);
-      setBefore(false);
-      void prepareComparison(baseOriginal, result);
-      setProcessMessage(
-        "สำเร็จ — ชุดจริงคงเดิม 100% และ AI ปรับเฉพาะคอ/รอยต่อปกเสื้อ",
-      );
-    } catch (e) {
-      setProcessMessage(
-        e instanceof Error ? e.message : "จัดชุดข้าราชการไม่สำเร็จ",
-      );
-    } finally {
-      setAiProcessing(false);
-    }
-  }
-
   async function aiEdit() {
-    if (outfit.tone === "official") {
-      await composeOfficialTemplate();
-      return;
-    }
     if (!aiSelected.length) {
       setProcessMessage("กรุณาเลือกอย่างน้อย 1 รายการ");
       return;
     }
     setAiProcessing(true);
-    setProcessMessage("AI กำลังปรับภาพจริง อาจใช้เวลาประมาณ 30–90 วินาที…");
+    setProcessMessage(
+      outfit.id.startsWith("official-")
+        ? "AI กำลังปรับคนให้เข้ากับเทมเพลตชุดข้าราชการจริง โดยล็อกรายละเอียดชุด…"
+        : "AI กำลังปรับภาพจริง อาจใช้เวลาประมาณ 30–90 วินาที…",
+    );
     try {
       const [source, outfitSource] = await Promise.all([
         fetch(baseOriginal),
@@ -1061,6 +769,8 @@ export default function Home() {
       form.append("image", blob, "portrait.png");
       form.append("outfit", outfitBlob, "outfit-reference.png");
       form.append("outfitLabel", `${outfit.label} (${outfit.sub})`);
+      form.append("outfitId", outfit.id);
+      form.append("outfitCategory", outfit.category);
       form.append("operations", JSON.stringify(aiSelected));
       form.append("hairVolume", hairVolume);
       form.append("skinStyle", skinStyle);
@@ -1095,7 +805,11 @@ export default function Home() {
       setCutout(null);
       setBefore(false);
       void prepareComparison(baseOriginal, normalizedImage);
-      setProcessMessage("AI ปรับภาพแบบ V3 สำเร็จแล้ว");
+      setProcessMessage(
+        outfit.id.startsWith("official-")
+          ? "สำเร็จ — ใช้เทมเพลตชุดข้าราชการจริง และปรับคน/คอให้สมดุล"
+          : "AI ปรับภาพแบบ V3 สำเร็จแล้ว",
+      );
     } catch (e) {
       setProcessMessage(
         e instanceof Error ? e.message : "AI ปรับภาพไม่สำเร็จ กรุณาลองอีกครั้ง",
@@ -1343,9 +1057,9 @@ export default function Home() {
               <Control label="ชุดขึ้น–ลง" value={hair} min={-20} max={20} onChange={setHair} /><Control label="ความสว่าง" value={skin} min={-10} max={10} onChange={setSkin} />
             </div>
           </details>
-          <button className="photoid-ai-button" onClick={aiEdit} disabled={aiProcessing}>{aiProcessing ? <LoaderCircle className="spin" /> : <WandSparkles />}{aiProcessing ? (outfit.tone === "official" ? "กำลังจัดชุดจริง…" : "กำลังสร้างรูปด้วย AI…") : (outfit.tone === "official" ? "จัดรูปด้วยเทมเพลตชุดจริง" : "สร้างรูปด้วย AI")}</button>
+          <button className="photoid-ai-button" onClick={aiEdit} disabled={aiProcessing}>{aiProcessing ? <LoaderCircle className="spin" /> : <WandSparkles />}{aiProcessing ? "กำลังสร้างรูปด้วย AI…" : "สร้างรูปด้วย AI"}</button>
           <button className="photoid-download-button" onClick={download}><Download /> ดาวน์โหลดรูป</button>
-          <small className="photoid-credit-note">{outfit.tone === "official" ? "โหมดชุดข้าราชการไม่ใช้เครดิต AI สำหรับการสร้างชุด" : "ใช้เครดิตสร้างภาพ AI"}</small>
+          <small className="photoid-credit-note">ใช้เครดิตสร้างภาพ AI</small>
           {processMessage && <p className="photoid-process-message">{processMessage}</p>}
         </aside>
       </div>
