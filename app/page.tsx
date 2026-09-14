@@ -33,7 +33,7 @@ const outfits = [
   { id: "job-men-open", label: "สูทชายคอเปิด", sub: "สมัครงาน", category: "สมัครงาน", image: "/templates/job-navy-suit-tie-men.png", tone: "suit" },
   { id: "job-white-women", label: "เสื้อขาวหญิง", sub: "สมัครงาน", category: "สมัครงาน", image: "/templates/job-white-shirt-women.png", tone: "student" },
   { id: "job-white-men", label: "เสื้อขาวชาย", sub: "สมัครงาน", category: "สมัครงาน", image: "/templates/job-white-shirt-men.png", tone: "student" },
-  { id: "official-female-practitioner-finance", label: "ปฏิบัติการหญิง", sub: "กระทรวงการคลัง", category: "ข้าราชการ", image: "/templates/official-female-practitioner-finance.png", tone: "official" },
+  { id: "official-female-practitioner-finance", label: "ปฏิบัติการหญิง", sub: "กระทรวงการคลัง", category: "ข้าราชการ", image: "/templates/official-female-practitioner-finance.png", tone: "official", compose: "template" as const },
   { id: "women-suit", label: "สูทหญิง", sub: "ข้าราชการ", category: "ข้าราชการ", image: "/templates/women-suit.png", tone: "suit" },
   { id: "men-suit", label: "สูทชาย", sub: "ข้าราชการ", category: "ข้าราชการ", image: "/templates/men-suit.png", tone: "suit" },
   { id: "women-student", label: "นักเรียนหญิง", sub: "นักเรียน", category: "นักเรียน", image: "/templates/women-student.png", tone: "student" },
@@ -745,7 +745,109 @@ export default function Home() {
     return canvas.toDataURL("image/png");
   }
 
+  async function composeOfficialTemplate() {
+    if (!hasUploadedImage) {
+      setProcessMessage("กรุณาเลือกรูปก่อน");
+      return;
+    }
+    setAiProcessing(true);
+    setProcessMessage("กำลังวัดสัดส่วนศีรษะและจัดเข้ากับชุดจริง…");
+    try {
+      const [{ FilesetResolver, FaceDetector }, sourceImage, templateImage] =
+        await Promise.all([
+          import("@mediapipe/tasks-vision"),
+          loadImage(baseOriginal),
+          loadImage(outfit.image),
+        ]);
+
+      const vision = await FilesetResolver.forVisionTasks(
+        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm",
+      );
+      const detector = await FaceDetector.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetPath:
+            "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/latest/blaze_face_short_range.tflite",
+        },
+        runningMode: "IMAGE",
+        minDetectionConfidence: 0.55,
+      });
+      const face = detector.detect(sourceImage).detections[0]?.boundingBox;
+      detector.close();
+      if (!face) {
+        throw new Error("ไม่พบใบหน้า กรุณาใช้รูปหน้าตรงที่เห็นใบหน้าชัด");
+      }
+
+      // Deterministic cutout only; no generative AI is used for government uniforms.
+      const personCutoutSrc = await makeTransparentCutout(baseOriginal);
+      const personImage = await loadImage(personCutoutSrc);
+
+      const canvas = document.createElement("canvas");
+      canvas.width = 900;
+      canvas.height = 1200;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("เปิดพื้นที่จัดภาพไม่ได้");
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+
+      // One shared official-photo geometry for every level/ministry template:
+      // fixed 3:4 garment placement; only the uploaded head/neck is fitted to it.
+      const targetFaceHeight = 250;
+      const targetFaceCenterX = 450;
+      const targetFaceCenterY = 300;
+      const scale = targetFaceHeight / face.height;
+      const sourceFaceCenterX = face.originX + face.width / 2;
+      const sourceFaceCenterY = face.originY + face.height / 2;
+      const drawX = targetFaceCenterX - sourceFaceCenterX * scale;
+      const drawY = targetFaceCenterY - sourceFaceCenterY * scale;
+
+      // Keep only the head/hair/neck zone from the uploaded person. The real
+      // uniform template is drawn above it, so source clothing cannot replace
+      // insignia, epaulettes, ribbons, buttons or garment construction.
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(70, 0, 760, 690);
+      ctx.clip();
+      ctx.drawImage(
+        personImage,
+        drawX,
+        drawY,
+        personImage.naturalWidth * scale,
+        personImage.naturalHeight * scale,
+      );
+      ctx.restore();
+
+      // Exact real uniform template: never regenerated, warped, stretched or
+      // re-designed. All future official templates use this same 3:4 placement.
+      ctx.drawImage(templateImage, 0, 0, 900, 1200);
+
+      const result = canvas.toDataURL("image/png");
+      setOriginal(result);
+      setAiBaseImage(result);
+      setAiComposited(true);
+      setCutout(null);
+      setZoom(100);
+      setX(0);
+      setY(0);
+      setBefore(false);
+      void prepareComparison(baseOriginal, result);
+      setProcessMessage(
+        "จัดชุดจริงสำเร็จ — ใช้เทมเพลตข้าราชการโดยไม่สร้างชุดใหม่ด้วย AI",
+      );
+    } catch (e) {
+      setProcessMessage(
+        e instanceof Error ? e.message : "จัดชุดข้าราชการไม่สำเร็จ",
+      );
+    } finally {
+      setAiProcessing(false);
+    }
+  }
+
   async function aiEdit() {
+    if (outfit.tone === "official") {
+      await composeOfficialTemplate();
+      return;
+    }
     if (!aiSelected.length) {
       setProcessMessage("กรุณาเลือกอย่างน้อย 1 รายการ");
       return;
@@ -1047,9 +1149,9 @@ export default function Home() {
               <Control label="ชุดขึ้น–ลง" value={hair} min={-20} max={20} onChange={setHair} /><Control label="ความสว่าง" value={skin} min={-10} max={10} onChange={setSkin} />
             </div>
           </details>
-          <button className="photoid-ai-button" onClick={aiEdit} disabled={aiProcessing}>{aiProcessing ? <LoaderCircle className="spin" /> : <WandSparkles />}{aiProcessing ? "กำลังสร้างรูปด้วย AI…" : "สร้างรูปด้วย AI"}</button>
+          <button className="photoid-ai-button" onClick={aiEdit} disabled={aiProcessing}>{aiProcessing ? <LoaderCircle className="spin" /> : <WandSparkles />}{aiProcessing ? (outfit.tone === "official" ? "กำลังจัดชุดจริง…" : "กำลังสร้างรูปด้วย AI…") : (outfit.tone === "official" ? "จัดรูปด้วยเทมเพลตชุดจริง" : "สร้างรูปด้วย AI")}</button>
           <button className="photoid-download-button" onClick={download}><Download /> ดาวน์โหลดรูป</button>
-          <small className="photoid-credit-note">ใช้เครดิตสร้างภาพ AI</small>
+          <small className="photoid-credit-note">{outfit.tone === "official" ? "โหมดชุดข้าราชการไม่ใช้เครดิต AI สำหรับการสร้างชุด" : "ใช้เครดิตสร้างภาพ AI"}</small>
           {processMessage && <p className="photoid-process-message">{processMessage}</p>}
         </aside>
       </div>
