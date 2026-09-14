@@ -1424,9 +1424,9 @@ export default function Home() {
         // the editable mask while seeing the exact real collar and shoulders.
         // Keep the real face modest relative to the fixed official shoulders.
         // The previous values made the head noticeably oversized.
-        const targetFaceHeight = isMale ? 218 : 208;
+        const targetFaceHeight = isMale ? 200 : 190;
         const targetFaceCenterX = 450;
-        const targetFaceCenterY = isMale ? 302 : 300;
+        const targetFaceCenterY = isMale ? 305 : 303;
         const scale = targetFaceHeight / Math.max(1, face.height);
         const sourceFaceCenterX = face.originX + face.width / 2;
         const sourceFaceCenterY = face.originY + face.height / 2;
@@ -1542,8 +1542,8 @@ export default function Home() {
         maskCtx.ellipse(
           fx(faceLockCenterX),
           fy(faceLockCenterY),
-          (finalFaceWidth * 0.57 / cropSize) * inputSize,
-          (finalFaceHeight * 0.50 / cropSize) * inputSize,
+          (finalFaceWidth * 0.66 / cropSize) * inputSize,
+          (finalFaceHeight * 0.60 / cropSize) * inputSize,
           0,
           0,
           Math.PI * 2,
@@ -1599,30 +1599,16 @@ export default function Home() {
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
 
-    // Real uniform first.
-    const templateScale = 0.93;
-    const tw = 900 * templateScale;
-    const th = 1200 * templateScale;
-    const tx = (900 - tw) / 2;
-    const originalTop = 524;
-    const ty = originalTop - originalTop * templateScale;
-    ctx.drawImage(template, tx, ty, tw, th);
-
-    // Paste back ONLY the same central editable geometry. This guarantees AI
-    // cannot change the uniform outside head/neck/inner-collar contact.
+    // ROOT-CAUSE FIX:
+    // Do NOT clip the returned head/hair/neck with an ellipse, rectangle,
+    // trapezoid, or any other hard geometric mask. The previous ellipse clip
+    // was exactly why long/side hair was visibly chopped into a rounded shape.
+    //
+    // Paste the COMPLETE transparent AI patch first.
     const cropX = 90;
     const cropY = 20;
     const cropSize = 720;
 
-    ctx.save();
-    ctx.beginPath();
-    ctx.ellipse(450, 290, 220, 255, 0, 0, Math.PI * 2);
-    ctx.moveTo(365, 388);
-    ctx.lineTo(535, 388);
-    ctx.lineTo(555, 620);
-    ctx.lineTo(345, 620);
-    ctx.closePath();
-    ctx.clip();
     ctx.drawImage(
       aiPatch,
       0,
@@ -1634,7 +1620,18 @@ export default function Home() {
       cropSize,
       cropSize,
     );
-    ctx.restore();
+
+    // Restore the exact REAL government-uniform PNG as the LAST layer.
+    // The lower neck therefore continues behind the real collar naturally,
+    // while every uniform detail remains the real template.
+    const templateScale = 0.93;
+    const tw = 900 * templateScale;
+    const th = 1200 * templateScale;
+    const tx = (900 - tw) / 2;
+    const originalTop = 524;
+    const ty = originalTop - originalTop * templateScale;
+
+    ctx.drawImage(template, tx, ty, tw, th);
 
     return canvas.toDataURL("image/png");
   }
