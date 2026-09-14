@@ -946,20 +946,23 @@ export default function Home() {
       if (!face) throw new Error("ไม่พบใบหน้าหลังประมวลผล");
 
       const isMale = /male|ชาย/.test(outfitId);
+
+      // Standard portrait proportions. The face is intentionally modest in size
+      // relative to the fixed official-template shoulders.
       const standard = isMale
         ? {
             faceHeight: 190,
             neckToFaceWidth: 0.60,
             minNeck: 78,
             maxNeck: 108,
+            neckLengthRatio: 0.40,
           }
         : {
-            // Smaller than the previous 205px face target so the head is not
-            // oversized relative to the fixed official shoulders.
             faceHeight: 182,
             neckToFaceWidth: 0.55,
             minNeck: 68,
             maxNeck: 96,
+            neckLengthRatio: 0.42,
           };
 
       const canvas = document.createElement("canvas");
@@ -971,10 +974,22 @@ export default function Home() {
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
 
-      // Uniform scaling of the COMPLETE head/hair unit. No facial feature is
-      // resized independently.
-      const targetFaceCenterX = 450;
-      const targetFaceCenterY = isMale ? 302 : 300;
+      // ---- TEMPLATE GEOMETRY FIRST ----
+      // This real PNG remains the source of truth. We compute the collar anchor
+      // before positioning the person, so the PERSON moves to the uniform rather
+      // than the uniform moving to the person.
+      const templateScale = 0.93;
+      const originalTemplateTop = 524;
+      const templateY =
+        originalTemplateTop - originalTemplateTop * templateScale;
+
+      // The first real template's inner neck opening is about 90px at y=620.
+      // This point is used as the physical neck-to-collar join anchor.
+      const templateCollarJoinY = 620;
+      const finalCollarJoinY =
+        templateY + templateCollarJoinY * templateScale;
+
+      // ---- PERSON SCALE / VERTICAL FIT ----
       const personScale = standard.faceHeight / Math.max(1, face.height);
       const targetFaceWidth = face.width * personScale;
       const targetNeckWidth = Math.max(
@@ -985,14 +1000,26 @@ export default function Home() {
         ),
       );
 
+      const targetNeckLength =
+        standard.faceHeight * standard.neckLengthRatio;
+
+      // BlazeFace bbox centre -> jaw is close to half the bbox height.
+      // Position the face so jaw + standard neck length lands *under* the
+      // template collar opening. This removes the visible floating-head gap.
+      const jawOffsetFromFaceCenter = standard.faceHeight * 0.50;
+      const targetFaceCenterX = 450;
+      const targetFaceCenterY =
+        finalCollarJoinY -
+        targetNeckLength -
+        jawOffsetFromFaceCenter;
+
       const sourceFaceCenterX = face.originX + face.width / 2;
       const sourceFaceCenterY = face.originY + face.height / 2;
       const dx = targetFaceCenterX - sourceFaceCenterX * personScale;
       const dy = targetFaceCenterY - sourceFaceCenterY * personScale;
 
-      // Draw the FULL transparent head/hair/neck layer. Do NOT clip it with a
-      // rectangle or polygon; that was the cause of the visibly cut head/hair.
-      // The AI output itself is already restricted to head/hair/neck only.
+      // Draw the COMPLETE transparent head/hair/neck layer with one uniform
+      // transform. No rectangular crop, no trapezoid crop, no pasted-head mask.
       ctx.drawImage(
         person,
         dx,
@@ -1001,7 +1028,9 @@ export default function Home() {
         person.naturalHeight * personScale,
       );
 
-      // Build an adaptive REAL template. AI never draws this uniform.
+      // ---- ADAPTIVE REAL COLLAR ----
+      // AI never draws this uniform. Only the transparent inner neck opening of
+      // the actual PNG may open/close slightly to meet the measured real neck.
       const templateCanvas = document.createElement("canvas");
       templateCanvas.width = 900;
       templateCanvas.height = 1200;
@@ -1016,19 +1045,20 @@ export default function Home() {
       const alphaAt = (x: number, y: number) =>
         td[(y * 900 + x) * 4 + 3];
 
-      // Slightly smaller whole-template fit gives safe sleeve margins.
-      const templateScale = 0.93;
-      const referenceJoinWidth = 94;
+      const referenceJoinWidth = 90;
       const desiredTemplateJoinWidth =
-        (targetNeckWidth + (isMale ? 12 : 8)) / templateScale;
+        (targetNeckWidth + (isMale ? 10 : 6)) / templateScale;
+
+      // Conservative adaptation only: enough to fit different necks but never
+      // enough to deform the real collar/lapels.
       const collarFactor = Math.max(
-        0.84,
-        Math.min(1.16, desiredTemplateJoinWidth / referenceJoinWidth),
+        0.88,
+        Math.min(1.12, desiredTemplateJoinWidth / referenceJoinWidth),
       );
 
       const centerX = 450;
-      const collarStartY = 535;
-      const collarEndY = 652;
+      const collarStartY = 548;
+      const collarEndY = 646;
 
       for (let y = collarStartY; y <= collarEndY; y++) {
         if (alphaAt(centerX, y) > 24) continue;
@@ -1039,10 +1069,10 @@ export default function Home() {
         while (right < 898 && alphaAt(right + 1, y) <= 24) right++;
 
         const currentWidth = right - left + 1;
-        if (currentWidth < 8 || currentWidth > 260) continue;
+        if (currentWidth < 8 || currentWidth > 240) continue;
 
-        const distance = Math.abs(y - 620);
-        const weight = Math.max(0, 1 - distance / 95);
+        const distance = Math.abs(y - templateCollarJoinY);
+        const weight = Math.max(0, 1 - distance / 82);
         const localFactor = 1 + (collarFactor - 1) * weight;
         const newWidth = Math.max(
           6,
@@ -1052,15 +1082,19 @@ export default function Home() {
         const newRight = newLeft + newWidth - 1;
 
         if (newWidth > currentWidth) {
+          // OPEN: remove only inner-edge alpha.
           for (let x = newLeft; x < left; x++) {
-            if (x < 0 || x >= 900) continue;
-            td[(y * 900 + x) * 4 + 3] = 0;
+            if (x >= 0 && x < 900) {
+              td[(y * 900 + x) * 4 + 3] = 0;
+            }
           }
           for (let x = right + 1; x <= newRight; x++) {
-            if (x < 0 || x >= 900) continue;
-            td[(y * 900 + x) * 4 + 3] = 0;
+            if (x >= 0 && x < 900) {
+              td[(y * 900 + x) * 4 + 3] = 0;
+            }
           }
         } else if (newWidth < currentWidth) {
+          // CLOSE: extend only genuine neighbouring collar pixels inward.
           let leftSource = left - 1;
           while (leftSource > 0 && alphaAt(leftSource, y) < 180) {
             leftSource--;
@@ -1093,42 +1127,21 @@ export default function Home() {
         }
       }
 
-      // Feather only the INNER collar alpha edge by 1 pixel. This softens the
-      // neck/collar meeting without blurring fabric, insignia or the rest of
-      // the uniform.
-      const alphaCopy = new Uint8ClampedArray(900 * 1200);
-      for (let i = 0; i < 900 * 1200; i++) {
-        alphaCopy[i] = td[i * 4 + 3];
-      }
-      for (let y = 545; y <= 645; y++) {
-        for (let x = 330; x <= 570; x++) {
-          const idx = y * 900 + x;
-          const a = alphaCopy[idx];
-          if (a === 0 || a === 255) continue;
-          let sum = 0;
-          let count = 0;
-          for (let yy = -1; yy <= 1; yy++) {
-            for (let xx = -1; xx <= 1; xx++) {
-              const ni = (y + yy) * 900 + (x + xx);
-              sum += alphaCopy[ni];
-              count++;
-            }
-          }
-          td[idx * 4 + 3] = Math.round(sum / count);
-        }
-      }
-
       templateCtx.putImageData(templatePixels, 0, 0);
 
+      // Draw the REAL template last. The collar therefore naturally overlaps
+      // the lower neck by several pixels, exactly like clothing in a real photo.
+      // No visible horizontal cut line can remain.
       const tw = 900 * templateScale;
       const th = 1200 * templateScale;
       const tx = (900 - tw) / 2;
-      const originalTop = 524;
-      const ty = originalTop - originalTop * templateScale;
-
-      // Template is drawn last, so it naturally covers the lower neck edges and
-      // creates a photographic-looking join rather than a pasted cut line.
-      ctx.drawImage(templateCanvas, tx, ty, tw, th);
+      ctx.drawImage(
+        templateCanvas,
+        tx,
+        templateY,
+        tw,
+        th,
+      );
 
       return canvas.toDataURL("image/png");
     } finally {
