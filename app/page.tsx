@@ -471,6 +471,44 @@ export default function Home() {
     }
   }
 
+
+  async function chromaKeyToTransparent(src: string) {
+    const image = await loadImage(src);
+    const canvas = document.createElement("canvas");
+    canvas.width = image.naturalWidth || image.width;
+    canvas.height = image.naturalHeight || image.height;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return src;
+
+    ctx.drawImage(image, 0, 0);
+    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = pixels.data;
+
+    // Transparency is created deterministically in the browser, not by AI.
+    // Only the temporary #FF00FF background is made transparent.
+    // RGB pixels belonging to the person are never repainted or regenerated.
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const dr = 255 - r;
+      const dg = g;
+      const db = 255 - b;
+      const distance = Math.sqrt(dr * dr + dg * dg + db * db);
+      const magentaDominant = r > 150 && b > 150 && r - g > 70 && b - g > 70;
+      if (!magentaDominant) continue;
+      if (distance <= 70) {
+        data[i + 3] = 0;
+      } else if (distance <= 145) {
+        const alpha = Math.round(((distance - 70) / 75) * 255);
+        data[i + 3] = Math.min(data[i + 3], alpha);
+      }
+    }
+
+    ctx.putImageData(pixels, 0, 0);
+    return canvas.toDataURL("image/png");
+  }
+
   async function normalizeAiResultToThreeFour(src: string, backgroundColor = bg) {
     const image = await loadImage(src);
     const canvas = document.createElement("canvas");
@@ -599,7 +637,8 @@ export default function Home() {
       };
       if (!response.ok || !data.image)
         throw new Error(data.error || "AI ปรับภาพไม่สำเร็จ");
-      const normalizedImage = await normalizeAiResultToThreeFour(data.image, bg);
+      const transparentPerson = await chromaKeyToTransparent(data.image);
+      const normalizedImage = await normalizeAiResultToThreeFour(transparentPerson, bg);
       setOriginal(normalizedImage);
       setZoom(100);
       setX(0);
