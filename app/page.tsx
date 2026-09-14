@@ -917,6 +917,77 @@ export default function Home() {
     return canvas.toDataURL("image/png");
   }
 
+
+  async function adaptiveMeshWarpTemplate(
+    template: HTMLImageElement,
+    shoulderScale: number,
+    shoulderCenterX = 450,
+  ) {
+    // Adaptive Template / Mesh Warping
+    // --------------------------------
+    // The real uniform pixels are preserved and geometrically re-mapped.
+    // We do NOT ask generative AI to redraw the uniform.  Horizontal stretch
+    // is strongest around the shoulders/chest and eases toward the collar and
+    // lower torso so the result follows human anatomy instead of looking like
+    // one globally-resized PNG.
+    const source = document.createElement("canvas");
+    source.width = 900;
+    source.height = 1200;
+    const sc = source.getContext("2d");
+    if (!sc) throw new Error("เตรียม Mesh Template ไม่ได้");
+    sc.imageSmoothingEnabled = true;
+    sc.imageSmoothingQuality = "high";
+    sc.drawImage(template, 0, 0, 900, 1200);
+
+    const output = document.createElement("canvas");
+    output.width = 900;
+    output.height = 1200;
+    const oc = output.getContext("2d");
+    if (!oc) throw new Error("สร้าง Adaptive Template ไม่ได้");
+    oc.imageSmoothingEnabled = true;
+    oc.imageSmoothingQuality = "high";
+
+    // Safety: normal portrait fitting should only need modest deformation.
+    const safeShoulderScale = Math.max(0.88, Math.min(1.12, shoulderScale));
+
+    const smoothstep = (t: number) => {
+      const x = Math.max(0, Math.min(1, t));
+      return x * x * (3 - 2 * x);
+    };
+
+    const scaleAtY = (y: number) => {
+      // Keep collar/neck anchor nearly unchanged.
+      if (y <= 500) return 1;
+      if (y < 620) {
+        const t = smoothstep((y - 500) / 120);
+        return 1 + (safeShoulderScale - 1) * t * 0.72;
+      }
+      // Maximum adaptation across shoulder/chest.
+      if (y <= 790) return safeShoulderScale;
+      // Ease into a slightly milder torso deformation.
+      const torsoScale = 1 + (safeShoulderScale - 1) * 0.78;
+      if (y < 1050) {
+        const t = smoothstep((y - 790) / 260);
+        return safeShoulderScale + (torsoScale - safeShoulderScale) * t;
+      }
+      return torsoScale;
+    };
+
+    // Small horizontal strips act like a light-weight mesh. Each strip is
+    // transformed independently, producing a continuous non-rigid deformation
+    // while keeping the source uniform's texture, colour and insignia pixels.
+    const stripH = 3;
+    for (let y = 0; y < 1200; y += stripH) {
+      const h = Math.min(stripH, 1200 - y);
+      const scaleX = scaleAtY(y + h / 2);
+      const destW = 900 * scaleX;
+      const destX = shoulderCenterX - shoulderCenterX * scaleX;
+      oc.drawImage(source, 0, y, 900, h, destX, y, destW, h);
+    }
+
+    return output;
+  }
+
   async function composeOfficialExactTemplate(
     personSrc: string,
     templateSrc: string,
@@ -1637,11 +1708,11 @@ export default function Home() {
       const originalTop = 524;
       const ty = originalTop - originalTop * templateScale;
 
-      const finalShoulderWidth = shoulderWidth * templateScale;
+      let finalShoulderWidth = shoulderWidth * templateScale;
       const finalShoulderCenterX =
         tx + shoulderCenterX * templateScale;
       const finalCollarY = ty + collarY * templateScale;
-      const finalCollarWidth = collarWidth * templateScale;
+      let finalCollarWidth = collarWidth * templateScale;
 
       // ------------------------------------------------------------
       // Compute human proportions from the REAL template + complete head.
@@ -1697,27 +1768,43 @@ export default function Home() {
           ? headRight - headLeft + 1
           : face.width * (isMale ? 1.45 : 1.62);
 
-      // A natural studio portrait usually reads best when the COMPLETE head/hair
-      // occupies about 44–47% of the visible shoulder span.  Female hairstyles
-      // often add a little more apparent width than male hairstyles.
-      const targetHeadToShoulder = isMale ? 0.44 : 0.46;
-      const desiredHeadWidth = finalShoulderWidth * targetHeadToShoulder;
-      let personScale = desiredHeadWidth / Math.max(1, measuredHeadWidth);
-
-      // Secondary guardrail from the actual face, not a fixed transform.
-      // This prevents extreme source crops from making the whole head too large
-      // or too small while keeping the face itself uniformly scaled.
-      let desiredFaceHeight = face.height * personScale;
-      const minFaceHeight = isMale ? 224 : 228;
-      const maxFaceHeight = isMale ? 278 : 282;
-      if (desiredFaceHeight < minFaceHeight) {
-        personScale *= minFaceHeight / Math.max(1, desiredFaceHeight);
-      } else if (desiredFaceHeight > maxFaceHeight) {
-        personScale *= maxFaceHeight / desiredFaceHeight;
-      }
+      // ADAPTIVE-TEMPLATE RULE:
+      // Keep the PERSON natural and let the REAL uniform move toward the person.
+      // We establish portrait framing from the detected face height with ONE
+      // uniform scale.  The face is never stretched horizontally or vertically.
+      const targetFaceHeight = isMale ? 252 : 258;
+      let personScale = targetFaceHeight / Math.max(1, face.height);
+      personScale = Math.max(0.74, Math.min(1.52, personScale));
 
       const scaledFaceWidth = face.width * personScale;
       const scaledFaceHeight = face.height * personScale;
+      const scaledHeadWidth = measuredHeadWidth * personScale;
+
+      // A natural studio portrait usually reads best when the COMPLETE head/hair
+      // occupies about 44–47% of the visible shoulder span.  Instead of resizing
+      // the head to a fixed PNG, calculate the shoulder span that THIS head needs.
+      const targetHeadToShoulder = isMale ? 0.44 : 0.46;
+      const desiredShoulderWidth =
+        scaledHeadWidth / Math.max(0.01, targetHeadToShoulder);
+
+      // Mesh deformation is deliberately bounded.  Up to 12% is enough to adapt
+      // body proportion while keeping real cloth texture, ribbons, buttons and
+      // insignia visually faithful to the source template.
+      const meshShoulderFactor = Math.max(
+        0.88,
+        Math.min(1.12, desiredShoulderWidth / Math.max(1, finalShoulderWidth)),
+      );
+
+      const adaptiveTemplate = await adaptiveMeshWarpTemplate(
+        template,
+        meshShoulderFactor,
+        shoulderCenterX,
+      );
+
+      finalShoulderWidth *= meshShoulderFactor;
+      // Collar opening follows only part of shoulder deformation, because a real
+      // collar is structurally stiffer than the chest/shoulder fabric.
+      finalCollarWidth *= 1 + (meshShoulderFactor - 1) * 0.72;
 
       // Neck anatomy: the old value was too narrow and made the head look
       // pasted onto the uniform.  Use a wider anatomical base, then let the
@@ -1917,10 +2004,11 @@ export default function Home() {
         ctx.drawImage(neckLayer, 0, 0);
       }
 
-      // ...then the exact REAL template on top. This hides the lower neck under
-      // the collar naturally. No AI-generated shoulder board, insignia, ribbon,
-      // tie, button, sleeve or outer uniform is used.
-      ctx.drawImage(template, tx, ty, tw, th);
+      // ...then the REAL template on top after bounded adaptive mesh warping.
+      // This hides the lower neck under the collar naturally.  The uniform is
+      // still made from the source template pixels; generative AI does not redraw
+      // shoulder boards, insignia, ribbons, tie, buttons, sleeves or fabric.
+      ctx.drawImage(adaptiveTemplate, tx, ty, tw, th);
 
       return canvas.toDataURL("image/png");
     } finally {
