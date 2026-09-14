@@ -122,15 +122,15 @@ You may edit ONLY the transparent mask covering:
 DO NOT modify outside the mask. DO NOT recreate or redesign the government uniform. DO NOT change epaulettes, ministry/collar insignia, ribbon bars, tie, buttons, lapels, sleeves, shoulder width, torso shape, fabric colour, or garment framing.
 
 PRIMARY GOAL:
-Make the person look naturally photographed wearing THIS EXACT visible uniform. Balance head size, hair size, vertical position, neck width and neck length relative to the fixed visible shoulders and collar. The final anatomy must resemble a professional formal portrait, not a pasted head.
+Make the person look naturally photographed wearing THIS EXACT visible uniform. Balance the selected/original HAIR and the NECK relative to the fixed visible shoulders and collar. The central face pixels are protected by the mask and are the immutable photographic identity source. Do not attempt to regenerate, reinterpret or replace the face. The final anatomy must resemble a professional formal portrait, not a pasted head.
 
 HEAD / BODY PROPORTION:
-- evaluate the visible fixed shoulder width before choosing head scale;
-- female portraits should generally look natural around ~1.55–1.80 shoulder-width / head-width relationship;
-- male portraits should generally look natural around ~2.0–2.3 shoulder-width / head-width relationship;
-- choose the natural value for this real person's anatomy rather than forcing a fixed number;
-- never make the head oversized and never make it unnaturally tiny;
-- scale the ENTIRE head+hair unit uniformly. Never resize facial features independently.
+- the website has already placed the REAL face at a smaller formal-portrait scale before this edit;
+- DO NOT enlarge the locked face;
+- use the fixed visible shoulder width and collar only to shape/position the editable hairstyle and neck naturally around that locked face;
+- never stretch or reshape facial features;
+- do not create a larger skull/face around the protected face;
+- preserve comfortable headroom and keep every hair endpoint inside the frame.
 
 NECK:
 Create a continuous natural neck from the unchanged jaw into the visible collar.
@@ -142,8 +142,8 @@ No floating head, no detached neck, no triangular skin wedge, no horizontal cut 
 COLLAR PERMISSION — LIMITED:
 If the fixed collar opening is slightly too narrow/wide for the natural neck, you MAY adjust ONLY the immediate inner collar contact edge inside the mask by the minimum amount required for a natural fit. Preserve the original collar design, lapels, tie and every official detail. Never change the outer uniform silhouette or camera distance.
 
-IDENTITY LOCK:
-Preserve the exact real identity from image 1: face shape, forehead, eyes, eyebrows, nose, lips, jaw, chin, ears, asymmetry, age, complexion, pores, blemishes, fine lines, under-eye detail, makeup, lighting and natural camera texture. Do not beautify, whiten, smooth, reshape, average or regenerate the face.
+IDENTITY LOCK — ABSOLUTE:
+The protected central face in image 1 is a locked photographic layer. Preserve it pixel-for-pixel outside the editable mask: exact eyes, eyelids, brows, nose, nostrils, lips, smile, cheeks, jaw, chin, facial asymmetry, complexion, pores, blemishes, fine lines, under-eye detail, makeup, highlights and shadows. No beautification, whitening, smoothing, age change, face replacement, face reconstruction or identity transfer. If the selected hairstyle reference contains another face, ignore that face completely.
 
 ${useHairstyleReference?`IMAGE 2 is the EXACT selected hairstyle (${hairstyle}). Transfer HAIR ONLY. Match its parting, bangs/front shape, crown volume, side silhouette, tied/untied state, length, layers, ear exposure and visible endpoints. Remove contradictory source-hair remnants. Never copy image-2 face, skin, ears, neck, clothing, accessories or lighting.`:`Keep the original hairstyle from image 1 exactly.`}
 
