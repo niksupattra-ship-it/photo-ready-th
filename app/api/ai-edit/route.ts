@@ -119,10 +119,13 @@ OUTPUT ONLY:
 - a natural centred neck from jaw to base of neck;
 - one perfectly flat #FF00FF background everywhere else.
 
+MANDATORY SAFETY MARGIN:
+Keep the entire hairstyle and head fully inside the square output. Leave at least about 16% clear chroma margin above the highest hair point, at least 14% margin on both left and right sides, and at least 18% chroma margin below the visible neck base. Never let hair, head, ears or neck touch or be clipped by any output edge. Do not zoom the head to fill the square.
+
 Do NOT include source shirt/blouse/neckline/shoulders. Do NOT include any government-uniform pixels. Below the natural neck base must be only #FF00FF.
 
 HEAD / NECK PROPORTION:
-Keep the whole head+hair unit naturally small enough for a formal half-body government portrait; do not enlarge the head. Preserve internal facial proportions exactly. Neck length should remain anatomically natural (roughly 0.33–0.50 head length where appropriate), centred below the jaw, without triangular skin wedges or detached edges.
+Keep the whole head+hair unit naturally small enough for a formal half-body government portrait; do not enlarge the head. The website will fit this person to a fixed real uniform template, so provide a naturally proportioned head rather than a close-up headshot. Preserve internal facial proportions exactly. Neck length should remain anatomically natural (roughly 0.33–0.50 head length where appropriate), centred below the jaw, with smooth continuous skin from jaw to neck base. No triangular skin wedges, no detached neck, no hard horizontal cut, no pasted-head appearance.
 
 ${skinInstruction || "Preserve the original skin tone, lighting and real skin texture."}
 ${chosen.filter((_, index)=>operations[index]!=="shoulders").join(" ")}
