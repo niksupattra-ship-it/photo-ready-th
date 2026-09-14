@@ -1104,7 +1104,11 @@ export default function Home() {
       // Standard shoulder-to-head relationship:
       // female ~1.55–1.80 head widths; male ~2.0–2.3.
       // Use the middle of each range so the head does not look oversized.
-      const shoulderToHeadRatio = isMale ? 2.12 : 1.68;
+      // Official portrait fit: the previous female ratio (1.68) made the complete
+      // head/hair unit visibly too small against this fixed government template.
+      // Use a slightly larger, still natural head scale while preserving the
+      // entire head+hair as ONE unit (never enlarge facial features separately).
+      const shoulderToHeadRatio = isMale ? 2.02 : 1.48;
 
       const targetHeadWidth =
         measuredShoulderWidth / shoulderToHeadRatio;
@@ -1113,8 +1117,8 @@ export default function Home() {
 
       // Keep the adjustment within a realistic safety range relative to face size.
       const targetFaceHeight = face.height * personScale;
-      const minFaceHeight = isMale ? 175 : 170;
-      const maxFaceHeight = isMale ? 215 : 205;
+      const minFaceHeight = isMale ? 182 : 188;
+      const maxFaceHeight = isMale ? 225 : 228;
 
       if (targetFaceHeight < minFaceHeight) {
         personScale *= minFaceHeight / Math.max(1, targetFaceHeight);
