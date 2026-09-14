@@ -716,6 +716,64 @@ export default function Home() {
     return canvas.toDataURL("image/png");
   }
 
+
+  async function officialMagentaToTransparent(src: string) {
+    const image = await loadImage(src);
+    const canvas = document.createElement("canvas");
+    canvas.width = image.naturalWidth || image.width;
+    canvas.height = image.naturalHeight || image.height;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return src;
+
+    ctx.drawImage(image, 0, 0);
+    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = pixels.data;
+
+    // IMPORTANT: official mode uses a deliberately flat #FF00FF temporary
+    // background.  Remove ONLY unmistakable magenta pixels.  Never estimate the
+    // background from face/skin colours and never modify RGB of retained pixels.
+    // This prevents cyan/blue/magenta skin contamination.
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+
+      const magentaDominance = Math.min(r, b) - g;
+      const rbDifference = Math.abs(r - b);
+
+      // Flat / near-flat chroma: fully transparent.
+      if (
+        r >= 170 &&
+        b >= 145 &&
+        g <= 105 &&
+        magentaDominance >= 75 &&
+        rbDifference <= 95
+      ) {
+        data[i + 3] = 0;
+        continue;
+      }
+
+      // Only a very narrow anti-aliased fringe is faded.
+      // RGB is intentionally untouched so skin/hair colour cannot be shifted.
+      if (
+        r >= 135 &&
+        b >= 120 &&
+        g <= 135 &&
+        magentaDominance >= 48 &&
+        rbDifference <= 110
+      ) {
+        const strength = Math.max(
+          0,
+          Math.min(1, (magentaDominance - 48) / 45),
+        );
+        data[i + 3] = Math.round(data[i + 3] * (1 - strength));
+      }
+    }
+
+    ctx.putImageData(pixels, 0, 0);
+    return canvas.toDataURL("image/png");
+  }
+
   async function normalizeAiResultToThreeFour(src: string, backgroundColor = bg) {
     const image = await loadImage(src);
     const sourceCanvas = document.createElement("canvas");
@@ -881,26 +939,35 @@ export default function Home() {
         : "AI กำลังปรับภาพจริง อาจใช้เวลาประมาณ 30–90 วินาที…",
     );
     try {
-      const [source, outfitSource] = await Promise.all([
-        fetch(baseOriginal),
-        fetch(outfit.image),
-      ]);
-      const [sourceBlob, outfitSourceBlob] = await Promise.all([
-        source.blob(),
-        outfitSource.blob(),
-      ]);
+      const isOfficialTemplate = outfit.id.startsWith("official-");
 
-      // Keep model / prompt / input_fidelity / quality / output size unchanged.
-      // Only oversized INPUT files are reduced before upload to avoid paying
-      // for phone-camera pixels that exceed the final model render resolution.
-      const [blob, outfitBlob] = await Promise.all([
-        optimizeAiInputBlob(sourceBlob, 1536),
-        optimizeAiInputBlob(outfitSourceBlob, 1536),
-      ]);
+      // COST RULE:
+      // Official uniforms are composited locally from the exact real PNG
+      // template after the AI call. Therefore the government-uniform image is
+      // NOT uploaded to OpenAI at all. Sending it was redundant, expensive
+      // high-fidelity image input and could also encourage the model to redraw
+      // the uniform even though those generated pixels are discarded later.
+      const source = await fetch(baseOriginal);
+      const sourceBlob = await source.blob();
+
+      // Preserve face fidelity. Only downscale oversized phone-camera input;
+      // never crop or change aspect ratio.
+      const blob = await optimizeAiInputBlob(
+        sourceBlob,
+        isOfficialTemplate ? 1280 : 1536,
+      );
 
       const form = new FormData();
       form.append("image", blob, "portrait.png");
-      form.append("outfit", outfitBlob, "outfit-reference.png");
+
+      // Non-official/job-application mode still needs the clothing reference
+      // exactly as before. Official mode intentionally skips this API input.
+      if (!isOfficialTemplate) {
+        const outfitSource = await fetch(outfit.image);
+        const outfitSourceBlob = await outfitSource.blob();
+        const outfitBlob = await optimizeAiInputBlob(outfitSourceBlob, 1536);
+        form.append("outfit", outfitBlob, "outfit-reference.png");
+      }
       form.append("outfitLabel", `${outfit.label} (${outfit.sub})`);
       form.append("outfitId", outfit.id);
       form.append("outfitCategory", outfit.category);
@@ -917,7 +984,7 @@ export default function Home() {
         const hairstyleSourceBlob = await hairstyleSource.blob();
         const hairstyleBlob = await optimizeAiInputBlob(
           hairstyleSourceBlob,
-          1280,
+          isOfficialTemplate ? 1024 : 1280,
         );
         form.append("hairstyleRef", hairstyleBlob, `${hairstyle}.png`);
       }
@@ -931,11 +998,9 @@ export default function Home() {
       };
       if (!response.ok || !data.image)
         throw new Error(data.error || "AI ปรับภาพไม่สำเร็จ");
-      const isOfficialTemplate = outfit.id.startsWith("official-");
-      const transparentPerson = await chromaKeyToTransparent(
-        data.image,
-        isOfficialTemplate,
-      );
+      const transparentPerson = isOfficialTemplate
+        ? await officialMagentaToTransparent(data.image)
+        : await chromaKeyToTransparent(data.image);
       const normalizedImage = isOfficialTemplate
         ? await composeOfficialExactTemplate(transparentPerson, outfit.image)
         : await normalizeAiResultToThreeFour(transparentPerson, bg);
