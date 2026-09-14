@@ -20,7 +20,9 @@ export async function POST(request:Request){
     const outfitId=String(input.get("outfitId")||"");
     const isOfficialTemplate=outfitId.startsWith("official-");
     const outfit=input.get("outfit");
+    const officialMask=input.get("mask");
     if(!isOfficialTemplate&&!(outfit instanceof File))return Response.json({error:"ไม่พบชุดอ้างอิง"},{status:400});
+    if(isOfficialTemplate&&!(officialMask instanceof File))return Response.json({error:"ไม่พบพื้นที่ปรับหัว/คอของชุดข้าราชการ"},{status:400});
     if(image.size>20*1024*1024)return Response.json({error:"รูปภาพต้องมีขนาดไม่เกิน 20 MB"},{status:413});
     let operations:string[]=[];
     try{operations=JSON.parse(String(input.get("operations")||"[]"));}catch{}
@@ -105,48 +107,70 @@ FINAL SELF-CHECK BEFORE RETURN:
 9) complete uniform edges/details remain inside frame;
 10) only a flat chroma-key background surrounds the person.`;
 
-    const officialPersonOnlyPrompt=`OFFICIAL TEMPLATE MODE — PERSON LAYER ONLY.
+    const officialPersonOnlyPrompt=`OFFICIAL GOVERNMENT PORTRAIT — SINGLE MASKED EDIT.
 
-The website will composite the REAL government-uniform PNG template locally after this request. You MUST NOT create, imitate, redraw, redesign or output any government uniform, civilian clothing, shoulders, chest, torso, epaulettes, tie, insignia, ribbon bars, buttons or sleeves.
+IMPORTANT: IMAGE 1 ALREADY CONTAINS THE EXACT REAL GOVERNMENT-UNIFORM TEMPLATE in the correct final framing. The uniform outside the transparent edit mask is LOCKED and must remain unchanged.
 
-IMAGE 1 is the only identity reference. Preserve the exact real face, complexion, pores, blemishes, fine lines, under-eye detail, makeup, expression, facial asymmetry, ears, forehead, jaw and natural camera texture. Do not beautify, smooth, whiten, reshape, average or regenerate the face.
+EDITABLE AREA:
+You may edit ONLY the transparent mask covering:
+- the real person's complete head and selected/original hairstyle,
+- ears when naturally visible,
+- jaw-to-neck transition,
+- natural neck,
+- and only the immediate INNER collar contact area needed to make the neck fit naturally.
 
-${useHairstyleReference?`IMAGE 2 is the EXACT selected hairstyle (${hairstyle}). Transfer HAIR ONLY. Match its parting, bangs/front section, crown volume, side silhouette, tied/untied state, length, layers and visible endpoints. Remove every contradictory remnant of the source hairstyle. Never copy the reference face, skin, ears, neck, accessories, lighting or background.`:`Keep image 1's original hairstyle exactly.`}
+DO NOT modify outside the mask. DO NOT recreate or redesign the government uniform. DO NOT change epaulettes, ministry/collar insignia, ribbon bars, tie, buttons, lapels, sleeves, shoulder width, torso shape, fabric colour, or garment framing.
 
-OUTPUT ONLY:
-- complete head;
-- complete selected/original hair;
-- both ears when naturally visible;
-- a natural centred neck from jaw to base of neck;
-- one perfectly flat #FF00FF background everywhere else.
+PRIMARY GOAL:
+Make the person look naturally photographed wearing THIS EXACT visible uniform. Balance head size, hair size, vertical position, neck width and neck length relative to the fixed visible shoulders and collar. The final anatomy must resemble a professional formal portrait, not a pasted head.
 
-MANDATORY SAFETY MARGIN:
-Keep the entire hairstyle and head fully inside the square output. Leave at least about 16% clear chroma margin above the highest hair point, at least 14% margin on both left and right sides, and at least 18% chroma margin below the visible neck base. Never let hair, head, ears or neck touch or be clipped by any output edge. Do not zoom the head to fill the square.
+HEAD / BODY PROPORTION:
+- evaluate the visible fixed shoulder width before choosing head scale;
+- female portraits should generally look natural around ~1.55–1.80 shoulder-width / head-width relationship;
+- male portraits should generally look natural around ~2.0–2.3 shoulder-width / head-width relationship;
+- choose the natural value for this real person's anatomy rather than forcing a fixed number;
+- never make the head oversized and never make it unnaturally tiny;
+- scale the ENTIRE head+hair unit uniformly. Never resize facial features independently.
 
-Do NOT include source shirt/blouse/neckline/shoulders. Do NOT include any government-uniform pixels. Below the natural neck base must be only #FF00FF.
+NECK:
+Create a continuous natural neck from the unchanged jaw into the visible collar.
+Use the actual face/head anatomy and visible collar opening to choose neck width.
+Neck length should generally be about 0.33–0.50 of head length where anatomically appropriate.
+The lower neck should naturally disappear behind/inside the collar.
+No floating head, no detached neck, no triangular skin wedge, no horizontal cut line, no pasted-head seam.
 
-NECK LENGTH / JOIN REQUIREMENT:
-The website will place the real uniform collar over the LOWER part of this neck. Therefore keep a COMPLETE natural neck extending clearly below the jaw all the way to its anatomical base; do not terminate the neck immediately under the chin and do not include clavicles/shoulders. The lower 15–20% of the visible neck is intentionally allowed to sit behind the real collar template so the final result has a natural overlap instead of a cut-and-paste seam.
+COLLAR PERMISSION — LIMITED:
+If the fixed collar opening is slightly too narrow/wide for the natural neck, you MAY adjust ONLY the immediate inner collar contact edge inside the mask by the minimum amount required for a natural fit. Preserve the original collar design, lapels, tie and every official detail. Never change the outer uniform silhouette or camera distance.
 
-HEAD / NECK PROPORTION:
-Keep the whole head+hair unit naturally small enough for a formal half-body government portrait; do not enlarge the head. The website will fit this person to a fixed real uniform template, so provide a naturally proportioned head rather than a close-up headshot. Preserve internal facial proportions exactly. Neck length should remain anatomically natural (roughly 0.33–0.50 head length where appropriate), centred below the jaw, with smooth continuous skin from jaw to neck base. No triangular skin wedges, no detached neck, no hard horizontal cut, no pasted-head appearance. Keep the jaw-to-neck transition continuous and realistic, and keep the neck narrower than the head while remaining anatomically proportional.
+IDENTITY LOCK:
+Preserve the exact real identity from image 1: face shape, forehead, eyes, eyebrows, nose, lips, jaw, chin, ears, asymmetry, age, complexion, pores, blemishes, fine lines, under-eye detail, makeup, lighting and natural camera texture. Do not beautify, whiten, smooth, reshape, average or regenerate the face.
 
-${skinInstruction || "Preserve the original skin tone, lighting and real skin texture."}
+${useHairstyleReference?`IMAGE 2 is the EXACT selected hairstyle (${hairstyle}). Transfer HAIR ONLY. Match its parting, bangs/front shape, crown volume, side silhouette, tied/untied state, length, layers, ear exposure and visible endpoints. Remove contradictory source-hair remnants. Never copy image-2 face, skin, ears, neck, clothing, accessories or lighting.`:`Keep the original hairstyle from image 1 exactly.`}
+
+HAIR EDGE:
+Keep the complete hairstyle inside the frame with natural fine strands and soft edges. No clipping, halo, glow, magenta/blue/cyan fringe, rectangular residue or hard cutout line.
+
+SKIN / LIGHT:
+${skinInstruction || "Preserve the original skin tone, lighting and natural skin texture."}
 ${chosen.filter((_, index)=>operations[index]!=="shoulders").join(" ")}
 ${volumeInstruction}
 
-EDGE QUALITY:
-Keep fine natural hair strands. No blue/cyan/pink/purple/magenta fringe, halo, glow, hard cutout contour or rectangular residue. Do not blur internal hair texture or skin.
-
-BACKGROUND:
-Exactly flat #FF00FF only. No blue background, no gradient, no scenery, no shadow.
-
 FINAL CHECK:
-same real person; exact selected hairstyle when requested; natural neck; absolutely no clothing/shoulders/torso; flat #FF00FF outside head/hair/neck.`;
+1) exact same person;
+2) selected hairstyle correct when requested;
+3) head/hair proportion balanced against the fixed real shoulders;
+4) natural continuous neck into collar;
+5) no pasted-head appearance;
+6) uniform outside mask unchanged;
+7) no newly invented government-uniform details.`;
+
 
     const body=new FormData();
     body.append("model","gpt-image-1.5");
     body.append("image[]",image,image.name||"portrait.png");
+    if(isOfficialTemplate&&officialMask instanceof File){
+      body.append("mask",officialMask,officialMask.name||"official-mask.png");
+    }
     if(!isOfficialTemplate&&outfit instanceof File){
       body.append("image[]",outfit,outfit.name||"outfit-reference.png");
     }
