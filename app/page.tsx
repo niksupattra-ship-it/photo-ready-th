@@ -158,6 +158,8 @@ export default function Home() {
   const [beforeState, setBefore] = useState(false);
   const [compareOriginal, setCompareOriginal] = useState<string | null>(null);
   const [comparePreparing, setComparePreparing] = useState(false);
+  const [compareBeforeZoom, setCompareBeforeZoom] = useState(100);
+  const [compareAfterZoom, setCompareAfterZoom] = useState(100);
   const compareMode = aiComposited && beforeState;
   const showOriginalOnly = !aiComposited && beforeState;
   const [zoom, setZoom] = useState(100);
@@ -946,11 +948,11 @@ export default function Home() {
           ) : compareMode ? (
             <div className="photoid-compare-stage" aria-label="เปรียบเทียบก่อนและหลัง">
               <div className="photoid-compare-pane">
-                <img src={compareOriginal ?? baseOriginal} alt="ภาพต้นฉบับ" />
+                <img src={compareOriginal ?? baseOriginal} alt="ภาพต้นฉบับ" style={{ transform: `scale(${compareBeforeZoom / 100})`, transformOrigin: "center center" }} />
                 <span>ก่อนปรับ</span>
               </div>
               <div className="photoid-compare-pane" style={{ background: bg }}>
-                <img src={shownSrc} alt="ภาพหลังปรับ" />
+                <img src={shownSrc} alt="ภาพหลังปรับ" style={{ transform: `scale(${compareAfterZoom / 100})`, transformOrigin: "center center" }} />
                 <span>หลังปรับ</span>
               </div>
               {comparePreparing && (
@@ -973,10 +975,18 @@ export default function Home() {
           )}
           {hasUploadedImage && (
             <div className="photoid-preview-actions">
-              {!compareMode && <><button onClick={() => setZoom(Math.max(70, zoom - 5))}><ZoomOut /></button><b>{zoom}%</b>
+              {!compareMode ? <><button onClick={() => setZoom(Math.max(70, zoom - 5))}><ZoomOut /></button><b>{zoom}%</b>
               <button onClick={() => setZoom(Math.min(180, zoom + 5))}><ZoomIn /></button>
-              <button onClick={reset}><RotateCcw /> รีเซ็ต</button></>}
-              <button onClick={() => setBefore(!beforeState)}><ImageIcon /> {aiComposited ? (compareMode ? "ดูรูปหลังปรับ" : "เปรียบเทียบก่อน–หลัง") : (showOriginalOnly ? "ดูหลังปรับ" : "ดูต้นฉบับ")}</button>
+              <button onClick={reset}><RotateCcw /> รีเซ็ต</button></> : <>
+              <span style={{ fontSize: 10, fontWeight: 700, color: "#536277" }}>ก่อน</span>
+              <button onClick={() => setCompareBeforeZoom(Math.max(70, compareBeforeZoom - 5))}><ZoomOut /></button><b>{compareBeforeZoom}%</b>
+              <button onClick={() => setCompareBeforeZoom(Math.min(180, compareBeforeZoom + 5))}><ZoomIn /></button>
+              <span style={{ fontSize: 10, fontWeight: 700, color: "#536277", marginLeft: 5 }}>หลัง</span>
+              <button onClick={() => setCompareAfterZoom(Math.max(70, compareAfterZoom - 5))}><ZoomOut /></button><b>{compareAfterZoom}%</b>
+              <button onClick={() => setCompareAfterZoom(Math.min(180, compareAfterZoom + 5))}><ZoomIn /></button>
+              <button onClick={() => { setCompareBeforeZoom(100); setCompareAfterZoom(100); }}><RotateCcw /> รีเซ็ต</button>
+              </>}
+              <button onClick={() => { if (aiComposited && !compareMode) { setCompareBeforeZoom(100); setCompareAfterZoom(100); } setBefore(!beforeState); }}><ImageIcon /> {aiComposited ? (compareMode ? "ดูรูปหลังปรับ" : "เปรียบเทียบก่อน–หลัง") : (showOriginalOnly ? "ดูหลังปรับ" : "ดูต้นฉบับ")}</button>
             </div>
           )}
           <div className="photoid-result-title">ตัวอย่างผลลัพธ์</div>
