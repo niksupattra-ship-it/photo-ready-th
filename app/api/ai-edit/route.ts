@@ -45,10 +45,10 @@ export async function POST(request: Request) {
       : "Keep IMAGE 1's original hairstyle exactly, except for explicitly selected small hair cleanup operations.";
 
     const lightInstruction = operations.includes("skin-light")
-      ? `Photographic light correction only: preset ${skinStyle}, strength ${skinStrength}/100. Correct exposure and white balance without whitening, smoothing, repainting, beautifying or changing facial anatomy. Preserve pores, blemishes, fine lines and the original complexion.`
-      : "Preserve the source skin tone, texture, highlights and shadows.";
+      ? `Photographic light matching only: preset ${skinStyle}, strength ${skinStrength}/100. DO NOT retouch or regenerate facial skin. Preserve the uploaded face pixels, pores, blemishes, fine lines, natural unevenness and exact complexion. Match any newly created neck skin TO the face; never change the face to match the neck.`
+      : "Preserve the source face skin exactly. Any generated neck skin must match the original face tone, texture, exposure and white balance.";
 
-    const identityLock = `IDENTITY LOCK — ABSOLUTE: IMAGE 1 is the real user and is the only identity source. Preserve the exact same person: eyes, eyelids, eyebrows, nose, nostrils, lips, cheeks, jaw, chin, ears, facial asymmetry, age, complexion, skin texture, expression and head shape. Do not beautify, average, reshape, reconstruct or substitute the face. Do not invent jewelry or accessories. The result must look like the same real photograph, not a similar AI person.`;
+    const identityLock = `IDENTITY LOCK — ABSOLUTE: IMAGE 1 is the real user and is the only identity source. The face is CAMERA-ORIGINAL CONTENT, not a generation target. Preserve the exact same eyes, eyelids, eye spacing, eyebrows, nose, nostrils, lips, cheeks, jaw, chin, ears, facial asymmetry, age, complexion, pores, blemishes, fine lines, expression and head shape. Do not beautify, average, reshape, repaint, reconstruct, relight, smooth, whiten, sharpen, denoise or substitute the face. Do not invent jewelry or accessories. The result must read as the same real professional photograph, never as a synthetic AI portrait.`;
 
     const personOnlyPrompt = `PROFESSIONAL ID PHOTO — PERSON LAYER FOR EXACT TEMPLATE COMPOSITING.
 
@@ -57,7 +57,7 @@ ${identityLock}
 The website will place the exact selected outfit template (${outfitLabel}) AFTER this AI call. Therefore return ONLY the person's complete HEAD, HAIR, EARS and a natural NECK. Do NOT generate any clothing, shoulders, chest, torso, collar, lapels, tie, uniform, insignia, arms or hands.
 
 FACE PROTECTION:
-Keep the central face visually unchanged. Do not change facial proportions or skin identity. Build only editable hair and neck around the same face.
+Treat the protected face as immutable photographic pixels. Do not redraw or reinterpret facial skin, eyes, eyebrows, nose, mouth, cheeks or facial geometry. Build only editable hair and neck around that exact face. The website will restore original face pixels again after compositing.
 
 ${hairInstruction}
 
