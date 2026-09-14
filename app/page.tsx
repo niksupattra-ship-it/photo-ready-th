@@ -512,7 +512,18 @@ export default function Home() {
           const targetFaceCenterY = 330;
           const faceCenterX = face.originX + face.width / 2;
           const faceCenterY = face.originY + face.height / 2;
-          const scale = targetFaceHeight / Math.max(1, face.height);
+          // Keep the AI-composed body proportions, but make the finished 3:4
+          // image itself fill the preview/export frame.  The previous code used
+          // only the face target scale, so a correctly-proportioned half-body
+          // result could sit inside a smaller 2:3 rectangle with visible side
+          // margins.  Never shrink below the scale required to cover the final
+          // 3:4 canvas; scale the WHOLE generated portrait uniformly.
+          const faceScale = targetFaceHeight / Math.max(1, face.height);
+          const frameCoverScale = Math.max(
+            canvas.width / image.naturalWidth,
+            canvas.height / image.naturalHeight,
+          );
+          const scale = Math.max(faceScale, frameCoverScale);
           const drawWidth = image.naturalWidth * scale;
           const drawHeight = image.naturalHeight * scale;
           const drawX = targetFaceCenterX - faceCenterX * scale;
@@ -528,9 +539,10 @@ export default function Home() {
       // Fall through to a deterministic no-face fallback.
     }
 
-    // Fallback: fit the complete raw AI result inside the 3:4 canvas instead of
-    // zooming/cropping it. This still favors the wider half-body composition.
-    const scale = Math.min(canvas.width / image.naturalWidth, canvas.height / image.naturalHeight);
+    // Fallback: fill the complete 3:4 display frame. The AI prompt already
+    // generates extra waist/arm safety area, so a centered cover crop removes
+    // only surplus outer background while keeping the person's proportions.
+    const scale = Math.max(canvas.width / image.naturalWidth, canvas.height / image.naturalHeight);
     const drawWidth = image.naturalWidth * scale;
     const drawHeight = image.naturalHeight * scale;
     ctx.drawImage(
