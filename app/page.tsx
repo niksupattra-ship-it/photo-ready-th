@@ -1414,9 +1414,9 @@ export default function Home() {
 
         // Keep the real face large enough for identity fidelity while leaving
         // generous safety margin for the COMPLETE hairstyle and full neck.
-        const targetFaceHeight = 205;
+        const targetFaceHeight = 178;
         const targetFaceCenterX = inputSize / 2;
-        const targetFaceCenterY = 315;
+        const targetFaceCenterY = 355;
 
         const scale = targetFaceHeight / Math.max(1, face.height);
         const sourceFaceCenterX = face.originX + face.width / 2;
@@ -1936,6 +1936,21 @@ export default function Home() {
           isJobApplication ? 1024 : 1536,
         );
         form.append("outfit", outfitBlob, "outfit-reference.png");
+      } else {
+        // Keep ONE AI request. Send the real official template only as a small
+        // geometry reference so AI can measure the real neck/collar opening.
+        // The final uniform itself still comes from the untouched real template.
+        const officialTemplateSource = await fetch(outfit.image);
+        const officialTemplateSourceBlob = await officialTemplateSource.blob();
+        const officialTemplateRef = await optimizeAiInputBlob(
+          officialTemplateSourceBlob,
+          512,
+        );
+        form.append(
+          "outfit",
+          officialTemplateRef,
+          "official-template-neck-reference.png",
+        );
       }
       form.append("outfitLabel", `${outfit.label} (${outfit.sub})`);
       form.append("outfitId", outfit.id);
