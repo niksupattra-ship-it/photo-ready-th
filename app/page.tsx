@@ -513,7 +513,7 @@ export default function Home() {
   }
 
 
-  async function chromaKeyToTransparent(src: string) {
+  async function chromaKeyToTransparent(src: string, strict = false) {
     const image = await loadImage(src);
     const canvas = document.createElement("canvas");
     canvas.width = image.naturalWidth || image.width;
@@ -581,7 +581,7 @@ export default function Home() {
     const queue = new Int32Array(count);
     let head = 0;
     let tail = 0;
-    const joinDistance = 128;
+    const joinDistance = strict ? 68 : 128;
     const enqueue = (pixel: number) => {
       if (pixel < 0 || pixel >= count || connected[pixel]) return;
       if (colorDistance(pixel) > joinDistance) return;
@@ -612,8 +612,8 @@ export default function Home() {
     // anti-aliased hair/clothing fringe gets partial alpha.  For partial-alpha edge
     // pixels, mathematically remove the detected background colour (despill) so no
     // blue/purple/green halo remains when placed over the website's chosen colour.
-    const transparentDistance = 34;
-    const opaqueDistance = 132;
+    const transparentDistance = strict ? 22 : 34;
+    const opaqueDistance = strict ? 88 : 132;
     for (let pixel = 0; pixel < count; pixel++) {
       if (!connected[pixel]) continue;
       const i = pixel * 4;
@@ -785,6 +785,90 @@ export default function Home() {
     return canvas.toDataURL("image/png");
   }
 
+  async function composeOfficialExactTemplate(
+    personSrc: string,
+    templateSrc: string,
+  ) {
+    const [{ FilesetResolver, FaceDetector }, person, template] =
+      await Promise.all([
+        import("@mediapipe/tasks-vision"),
+        loadImage(personSrc),
+        loadImage(templateSrc),
+      ]);
+
+    const vision = await FilesetResolver.forVisionTasks(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm",
+    );
+    const detector = await FaceDetector.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath:
+          "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/latest/blaze_face_short_range.tflite",
+      },
+      runningMode: "IMAGE",
+      minDetectionConfidence: 0.5,
+    });
+
+    try {
+      const face = detector.detect(person).detections[0]?.boundingBox;
+      if (!face) throw new Error("ไม่พบใบหน้าหลังประมวลผล");
+
+      const canvas = document.createElement("canvas");
+      canvas.width = 900;
+      canvas.height = 1200;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("รวมเทมเพลตข้าราชการไม่ได้");
+      ctx.clearRect(0, 0, 900, 1200);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+
+      // PERSON FIT:
+      // The AI output for official uniforms contains ONLY the real person's
+      // head/hair/ears/neck.  Fit that head to the fixed collar geometry.
+      // This is a uniform transform of the whole head/hair unit; facial features
+      // are never scaled independently.
+      const targetFaceHeight = 220;
+      const targetFaceCenterX = 450;
+      const targetFaceCenterY = 330;
+      const personScale = targetFaceHeight / Math.max(1, face.height);
+      const sourceFaceCenterX = face.originX + face.width / 2;
+      const sourceFaceCenterY = face.originY + face.height / 2;
+      const personDrawX = targetFaceCenterX - sourceFaceCenterX * personScale;
+      const personDrawY = targetFaceCenterY - sourceFaceCenterY * personScale;
+
+      ctx.drawImage(
+        person,
+        personDrawX,
+        personDrawY,
+        person.naturalWidth * personScale,
+        person.naturalHeight * personScale,
+      );
+
+      // EXACT REAL TEMPLATE LAYER:
+      // Never use AI-generated uniform pixels.  The supplied PNG is the final
+      // uniform.  Scale the WHOLE template uniformly by 94% so both outer sleeve
+      // edges stay inside the 3:4 frame.  Preserve its top collar position.
+      const templateScale = 0.94;
+      const templateWidth = 900 * templateScale;
+      const templateHeight = 1200 * templateScale;
+      const templateX = (900 - templateWidth) / 2;
+      // Original first visible uniform pixels begin around y=526. Keep that
+      // collar/shoulder height stable while creating left/right arm margins.
+      const templateY = 526 - 526 * templateScale;
+
+      ctx.drawImage(
+        template,
+        templateX,
+        templateY,
+        templateWidth,
+        templateHeight,
+      );
+
+      return canvas.toDataURL("image/png");
+    } finally {
+      detector.close();
+    }
+  }
+
   async function aiEdit() {
     if (!aiSelected.length) {
       setProcessMessage("กรุณาเลือกอย่างน้อย 1 รายการ");
@@ -847,8 +931,15 @@ export default function Home() {
       };
       if (!response.ok || !data.image)
         throw new Error(data.error || "AI ปรับภาพไม่สำเร็จ");
-      const transparentPerson = await chromaKeyToTransparent(data.image);
-      const normalizedImage = await normalizeAiResultToThreeFour(transparentPerson, bg);
+      const isOfficialTemplate = outfit.id.startsWith("official-");
+      const transparentPerson = await chromaKeyToTransparent(
+        data.image,
+        isOfficialTemplate,
+      );
+      const normalizedImage = isOfficialTemplate
+        ? await composeOfficialExactTemplate(transparentPerson, outfit.image)
+        : await normalizeAiResultToThreeFour(transparentPerson, bg);
+
       setOriginal(normalizedImage);
       setZoom(100);
       setX(0);
@@ -859,8 +950,8 @@ export default function Home() {
       setBefore(false);
       void prepareComparison(baseOriginal, normalizedImage);
       setProcessMessage(
-        outfit.id.startsWith("official-")
-          ? "สำเร็จ — ใช้เทมเพลตชุดข้าราชการจริง และปรับคน/คอให้สมดุล"
+        isOfficialTemplate
+          ? "สำเร็จ — ใช้เทมเพลตชุดข้าราชการจริง 100% และ AI ปรับเฉพาะคน/คอ/ทรงผม"
           : "AI ปรับภาพแบบ V3 สำเร็จแล้ว",
       );
     } catch (e) {
