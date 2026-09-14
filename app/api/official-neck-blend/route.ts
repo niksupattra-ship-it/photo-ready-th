@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     const prompt = `
 OFFICIAL UNIFORM NECK-BLEND ONLY — STRICT MASKED EDIT.
 
-This image is already a finished composition using an EXACT REAL GOVERNMENT-UNIFORM TEMPLATE.
+This is a SQUARE CROP from the neck/collar area of a finished composition using an EXACT REAL GOVERNMENT-UNIFORM TEMPLATE.
 DO NOT redesign, regenerate, replace, resize, repaint, or reinterpret the uniform.
 
 EDIT ONLY inside the transparent mask around:
@@ -69,7 +69,7 @@ Preserve pores, fine lines and real skin texture.
 No smoothing, whitening, makeup, face retouching, reshaping or beauty enhancement.
 
 ABSOLUTE LOCK:
-Outside the supplied transparent mask, preserve the image unchanged.
+Outside the supplied transparent mask, preserve the crop unchanged. Do not extend, reframe, resize, or create any background.
 Do not create or alter background.
 Do not change hairstyle.
 Do not add earrings, jewelry, accessories, marks or foreign objects.
@@ -83,7 +83,7 @@ Do not add earrings, jewelry, accessories, marks or foreign objects.
     body.append("input_fidelity", "high");
     body.append("quality", "high");
     body.append("output_format", "png");
-    body.append("size", "1024x1536");
+    body.append("size", "1024x1024");
     body.append("n", "1");
 
     const result = await fetch("https://api.openai.com/v1/images/edits", {
