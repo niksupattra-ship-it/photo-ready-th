@@ -483,26 +483,87 @@ export default function Home() {
     ctx.drawImage(image, 0, 0);
     const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = pixels.data;
+    const width = canvas.width;
+    const height = canvas.height;
+    const count = width * height;
 
-    // Transparency is created deterministically in the browser, not by AI.
-    // Only the temporary #FF00FF background is made transparent.
-    // RGB pixels belonging to the person are never repainted or regenerated.
-    for (let i = 0; i < data.length; i += 4) {
+    // Edge-only chroma matte. We start from the outer border and walk only through
+    // magenta/chroma-connected pixels, so colors inside the person are never keyed.
+    const connected = new Uint8Array(count);
+    const queue = new Int32Array(count);
+    let head = 0;
+    let tail = 0;
+
+    const chromaStrength = (pixel: number) => {
+      const i = pixel * 4;
       const r = data[i];
       const g = data[i + 1];
       const b = data[i + 2];
-      const dr = 255 - r;
-      const dg = g;
-      const db = 255 - b;
-      const distance = Math.sqrt(dr * dr + dg * dg + db * db);
-      const magentaDominant = r > 150 && b > 150 && r - g > 70 && b - g > 70;
-      if (!magentaDominant) continue;
-      if (distance <= 70) {
+      // Magenta dominance. Pure #FF00FF = 255; ordinary skin/hair/clothes are low.
+      return Math.min(r, b) - g;
+    };
+
+    const canJoinBackground = (pixel: number) => {
+      const i = pixel * 4;
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      return r > 85 && b > 85 && chromaStrength(pixel) > 22;
+    };
+
+    const enqueue = (pixel: number) => {
+      if (pixel < 0 || pixel >= count || connected[pixel] || !canJoinBackground(pixel)) return;
+      connected[pixel] = 1;
+      queue[tail++] = pixel;
+    };
+
+    for (let x = 0; x < width; x++) {
+      enqueue(x);
+      enqueue((height - 1) * width + x);
+    }
+    for (let y = 0; y < height; y++) {
+      enqueue(y * width);
+      enqueue(y * width + width - 1);
+    }
+
+    while (head < tail) {
+      const pixel = queue[head++];
+      const x = pixel % width;
+      const y = Math.floor(pixel / width);
+      if (x > 0) enqueue(pixel - 1);
+      if (x + 1 < width) enqueue(pixel + 1);
+      if (y > 0) enqueue(pixel - width);
+      if (y + 1 < height) enqueue(pixel + width);
+    }
+
+    // Build a soft alpha only on the border-connected chroma region. Then mathematically
+    // remove the magenta contribution from partially transparent edge pixels (despill).
+    // This changes only the cutout fringe; face, skin, lighting and interior RGB stay intact.
+    for (let pixel = 0; pixel < count; pixel++) {
+      if (!connected[pixel]) continue;
+      const i = pixel * 4;
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const strength = Math.max(0, Math.min(255, Math.min(r, b) - g));
+
+      // Strong chroma is background; weaker chroma at the silhouette becomes a soft edge.
+      let alpha = 1 - strength / 205;
+      alpha = Math.max(0, Math.min(1, alpha));
+      if (strength >= 190) alpha = 0;
+
+      if (alpha <= 0.015) {
         data[i + 3] = 0;
-      } else if (distance <= 145) {
-        const alpha = Math.round(((distance - 70) / 75) * 255);
-        data[i + 3] = Math.min(data[i + 3], alpha);
+        continue;
       }
+
+      // Undo compositing over #FF00FF: C = a*F + (1-a)*M.
+      // Recover F so no pink/purple halo remains when placed on blue/white backgrounds.
+      const inv = 1 - alpha;
+      data[i] = Math.max(0, Math.min(255, Math.round((r - inv * 255) / alpha)));
+      data[i + 1] = Math.max(0, Math.min(255, Math.round(g / alpha)));
+      data[i + 2] = Math.max(0, Math.min(255, Math.round((b - inv * 255) / alpha)));
+      data[i + 3] = Math.max(0, Math.min(255, Math.round(alpha * 255)));
     }
 
     ctx.putImageData(pixels, 0, 0);
