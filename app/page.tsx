@@ -487,32 +487,63 @@ export default function Home() {
     const height = canvas.height;
     const count = width * height;
 
-    // Edge-only chroma matte. We start from the outer border and walk only through
-    // magenta/chroma-connected pixels, so colors inside the person are never keyed.
+    // Detect the ACTUAL flat AI background from the outer border.  Do not assume
+    // magenta/blue/white: some image-model runs ignore the requested chroma hue.
+    // Quantising the border and taking its dominant bucket makes this stable even
+    // when the person's arms/waist touch part of the bottom edge.
+    const buckets = new Map<number, { count: number; r: number; g: number; b: number }>();
+    const addSample = (x: number, y: number) => {
+      const i = (y * width + x) * 4;
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const key = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4);
+      const item = buckets.get(key) ?? { count: 0, r: 0, g: 0, b: 0 };
+      item.count += 1;
+      item.r += r;
+      item.g += g;
+      item.b += b;
+      buckets.set(key, item);
+    };
+
+    const step = Math.max(1, Math.floor(Math.min(width, height) / 240));
+    for (let x = 0; x < width; x += step) {
+      addSample(x, 0);
+      addSample(x, Math.max(0, height - 1));
+    }
+    for (let y = 0; y < height; y += step) {
+      addSample(0, y);
+      addSample(Math.max(0, width - 1), y);
+    }
+
+    let dominant: { count: number; r: number; g: number; b: number } | null = null;
+    for (const item of buckets.values()) {
+      if (!dominant || item.count > dominant.count) dominant = item;
+    }
+    if (!dominant || dominant.count < 4) return src;
+
+    const bgR = dominant.r / dominant.count;
+    const bgG = dominant.g / dominant.count;
+    const bgB = dominant.b / dominant.count;
+    const colorDistance = (pixel: number) => {
+      const i = pixel * 4;
+      const dr = data[i] - bgR;
+      const dg = data[i + 1] - bgG;
+      const db = data[i + 2] - bgB;
+      return Math.sqrt(dr * dr + dg * dg + db * db);
+    };
+
+    // Only pixels CONNECTED TO THE OUTER BORDER can become background.  This is the
+    // important safety rule: identical/similar colours inside the face, hair or suit
+    // are not keyed out just because they resemble the background.
     const connected = new Uint8Array(count);
     const queue = new Int32Array(count);
     let head = 0;
     let tail = 0;
-
-    const chromaStrength = (pixel: number) => {
-      const i = pixel * 4;
-      const r = data[i];
-      const g = data[i + 1];
-      const b = data[i + 2];
-      // Magenta dominance. Pure #FF00FF = 255; ordinary skin/hair/clothes are low.
-      return Math.min(r, b) - g;
-    };
-
-    const canJoinBackground = (pixel: number) => {
-      const i = pixel * 4;
-      const r = data[i];
-      const g = data[i + 1];
-      const b = data[i + 2];
-      return r > 85 && b > 85 && chromaStrength(pixel) > 22;
-    };
-
+    const joinDistance = 128;
     const enqueue = (pixel: number) => {
-      if (pixel < 0 || pixel >= count || connected[pixel] || !canJoinBackground(pixel)) return;
+      if (pixel < 0 || pixel >= count || connected[pixel]) return;
+      if (colorDistance(pixel) > joinDistance) return;
       connected[pixel] = 1;
       queue[tail++] = pixel;
     };
@@ -536,34 +567,31 @@ export default function Home() {
       if (y + 1 < height) enqueue(pixel + width);
     }
 
-    // Build a soft alpha only on the border-connected chroma region. Then mathematically
-    // remove the magenta contribution from partially transparent edge pixels (despill).
-    // This changes only the cutout fringe; face, skin, lighting and interior RGB stay intact.
+    // Feather only the border-connected matte.  Pure background is alpha 0;
+    // anti-aliased hair/clothing fringe gets partial alpha.  For partial-alpha edge
+    // pixels, mathematically remove the detected background colour (despill) so no
+    // blue/purple/green halo remains when placed over the website's chosen colour.
+    const transparentDistance = 34;
+    const opaqueDistance = 132;
     for (let pixel = 0; pixel < count; pixel++) {
       if (!connected[pixel]) continue;
       const i = pixel * 4;
-      const r = data[i];
-      const g = data[i + 1];
-      const b = data[i + 2];
-      const strength = Math.max(0, Math.min(255, Math.min(r, b) - g));
-
-      // Strong chroma is background; weaker chroma at the silhouette becomes a soft edge.
-      let alpha = 1 - strength / 205;
+      const distance = colorDistance(pixel);
+      let alpha = (distance - transparentDistance) / (opaqueDistance - transparentDistance);
       alpha = Math.max(0, Math.min(1, alpha));
-      if (strength >= 190) alpha = 0;
 
-      if (alpha <= 0.015) {
+      if (alpha <= 0.02) {
         data[i + 3] = 0;
         continue;
       }
 
-      // Undo compositing over #FF00FF: C = a*F + (1-a)*M.
-      // Recover F so no pink/purple halo remains when placed on blue/white backgrounds.
-      const inv = 1 - alpha;
-      data[i] = Math.max(0, Math.min(255, Math.round((r - inv * 255) / alpha)));
-      data[i + 1] = Math.max(0, Math.min(255, Math.round(g / alpha)));
-      data[i + 2] = Math.max(0, Math.min(255, Math.round((b - inv * 255) / alpha)));
-      data[i + 3] = Math.max(0, Math.min(255, Math.round(alpha * 255)));
+      if (alpha < 0.995) {
+        const inv = 1 - alpha;
+        data[i] = Math.max(0, Math.min(255, Math.round((data[i] - inv * bgR) / alpha)));
+        data[i + 1] = Math.max(0, Math.min(255, Math.round((data[i + 1] - inv * bgG) / alpha)));
+        data[i + 2] = Math.max(0, Math.min(255, Math.round((data[i + 2] - inv * bgB) / alpha)));
+        data[i + 3] = Math.round(alpha * 255);
+      }
     }
 
     ctx.putImageData(pixels, 0, 0);
@@ -572,86 +600,70 @@ export default function Home() {
 
   async function normalizeAiResultToThreeFour(src: string, backgroundColor = bg) {
     const image = await loadImage(src);
+    const sourceCanvas = document.createElement("canvas");
+    sourceCanvas.width = image.naturalWidth || image.width;
+    sourceCanvas.height = image.naturalHeight || image.height;
+    const sourceCtx = sourceCanvas.getContext("2d", { willReadFrequently: true });
+    if (!sourceCtx) return src;
+    sourceCtx.drawImage(image, 0, 0);
+
+    const sourcePixels = sourceCtx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
+    const data = sourcePixels.data;
+    const sw = sourceCanvas.width;
+    const sh = sourceCanvas.height;
+
+    // Find the visible PERSON silhouette from alpha after background removal.
+    // The final composition is based on this bbox, not on the raw AI rectangle, so
+    // zoom-out never reveals a smaller coloured rectangle inside the 3:4 stage.
+    let minX = sw;
+    let minY = sh;
+    let maxX = -1;
+    let maxY = -1;
+    for (let y = 0; y < sh; y++) {
+      for (let x = 0; x < sw; x++) {
+        const a = data[(y * sw + x) * 4 + 3];
+        if (a < 20) continue;
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+
     const canvas = document.createElement("canvas");
     canvas.width = 900;
     canvas.height = 1200;
     const ctx = canvas.getContext("2d");
     if (!ctx) return src;
-
-    // IMPORTANT: every generated outfit must finish at the SAME camera distance.
-    // Do not let the raw AI crop or the outfit-reference crop decide the final scale.
-    // We normalize by the detected face, then move/scale the WHOLE generated person
-    // as one rigid image. This keeps head/body proportions intact while making every
-    // outfit land at the same waist-up framing.
-    // Keep the normalized AI result transparent. The selected background color
-    // is rendered by the website stage/export layer, never by the AI image.
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    try {
-      const { FilesetResolver, FaceDetector } = await import("@mediapipe/tasks-vision");
-      const vision = await FilesetResolver.forVisionTasks(
-        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm",
-      );
-      const detector = await FaceDetector.createFromOptions(vision, {
-        baseOptions: {
-          modelAssetPath:
-            "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/latest/blaze_face_short_range.tflite",
-        },
-        runningMode: "IMAGE",
-        minDetectionConfidence: 0.5,
-      });
+    if (maxX < minX || maxY < minY) return src;
 
-      try {
-        const face = detector.detect(image).detections[0]?.boundingBox;
-        if (face) {
-          // Fixed final framing for EVERY outfit / hairstyle / source photo.
-          // 900x1200 final canvas: face bbox ~17.5% of image height, centered high
-          // enough to leave the complete shoulders, arms and waist visible below.
-          const targetFaceHeight = 210;
-          const targetFaceCenterX = 450;
-          const targetFaceCenterY = 330;
-          const faceCenterX = face.originX + face.width / 2;
-          const faceCenterY = face.originY + face.height / 2;
-          // Keep the AI-composed body proportions, but make the finished 3:4
-          // image itself fill the preview/export frame.  The previous code used
-          // only the face target scale, so a correctly-proportioned half-body
-          // result could sit inside a smaller 2:3 rectangle with visible side
-          // margins.  Never shrink below the scale required to cover the final
-          // 3:4 canvas; scale the WHOLE generated portrait uniformly.
-          const faceScale = targetFaceHeight / Math.max(1, face.height);
-          const frameCoverScale = Math.max(
-            canvas.width / image.naturalWidth,
-            canvas.height / image.naturalHeight,
-          );
-          const scale = Math.max(faceScale, frameCoverScale);
-          const drawWidth = image.naturalWidth * scale;
-          const drawHeight = image.naturalHeight * scale;
-          const drawX = targetFaceCenterX - faceCenterX * scale;
-          const drawY = targetFaceCenterY - faceCenterY * scale;
+    const personWidth = Math.max(1, maxX - minX + 1);
+    const personHeight = Math.max(1, maxY - minY + 1);
 
-          ctx.drawImage(image, drawX, drawY, drawWidth, drawHeight);
-          return canvas.toDataURL("image/png");
-        }
-      } finally {
-        detector.close();
-      }
-    } catch {
-      // Fall through to a deterministic no-face fallback.
-    }
+    // Keep the ENTIRE generated half-body visible: complete head/hair, both arms and
+    // waist.  Uniform scaling preserves the AI's head/body proportions.  The website
+    // background shows through all transparent margins, therefore the image fills the
+    // stage visually without ever cropping the person.
+    const targetLeft = 36;
+    const targetRight = 864;
+    const targetTop = 72;
+    const targetBottom = 1190;
+    const targetWidth = targetRight - targetLeft;
+    const targetHeight = targetBottom - targetTop;
+    const scale = Math.min(targetWidth / personWidth, targetHeight / personHeight);
 
-    // Fallback: fill the complete 3:4 display frame. The AI prompt already
-    // generates extra waist/arm safety area, so a centered cover crop removes
-    // only surplus outer background while keeping the person's proportions.
-    const scale = Math.max(canvas.width / image.naturalWidth, canvas.height / image.naturalHeight);
-    const drawWidth = image.naturalWidth * scale;
-    const drawHeight = image.naturalHeight * scale;
-    ctx.drawImage(
-      image,
-      (canvas.width - drawWidth) / 2,
-      (canvas.height - drawHeight) / 2,
-      drawWidth,
-      drawHeight,
-    );
+    const visibleWidth = personWidth * scale;
+    const visibleHeight = personHeight * scale;
+    const targetPersonX = (canvas.width - visibleWidth) / 2;
+    // Keep a consistent headroom while allowing the waist to extend naturally down.
+    const targetPersonY = targetTop + Math.max(0, (targetHeight - visibleHeight) * 0.12);
+
+    const drawX = targetPersonX - minX * scale;
+    const drawY = targetPersonY - minY * scale;
+    ctx.drawImage(image, drawX, drawY, sw * scale, sh * scale);
+
     return canvas.toDataURL("image/png");
   }
 
