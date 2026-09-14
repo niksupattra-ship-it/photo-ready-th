@@ -800,34 +800,116 @@ export default function Home() {
     ctx.drawImage(image, 0, 0);
     const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const d = pixels.data;
+    const w = canvas.width;
+    const h = canvas.height;
 
-    // Official AI is instructed to return flat #FF00FF. Remove only obvious
-    // chroma/background colours. Never recolour retained skin/hair RGB.
-    for (let i = 0; i < d.length; i += 4) {
-      const r = d[i], g = d[i + 1], b = d[i + 2];
+    // Sample only the outer border. The AI is instructed to return a flat
+    // chroma background, but it may occasionally choose blue/cyan instead of
+    // magenta. We therefore detect the ACTUAL border colour rather than
+    // guessing a fixed colour. This never recolours retained skin/hair pixels.
+    const samples: Array<[number, number, number]> = [];
+    const pushSample = (x: number, y: number) => {
+      const i = (y * w + x) * 4;
+      samples.push([d[i], d[i + 1], d[i + 2]]);
+    };
+    const step = Math.max(1, Math.floor(Math.min(w, h) / 80));
+    for (let x = 0; x < w; x += step) {
+      pushSample(x, 0);
+      pushSample(x, h - 1);
+    }
+    for (let y = 0; y < h; y += step) {
+      pushSample(0, y);
+      pushSample(w - 1, y);
+    }
 
-      const magenta =
-        r >= 145 &&
-        b >= 125 &&
-        g <= 125 &&
-        Math.min(r, b) - g >= 55;
+    const median = (values: number[]) => {
+      const sorted = [...values].sort((a, b) => a - b);
+      return sorted[Math.floor(sorted.length / 2)] ?? 0;
+    };
+    const bgR = median(samples.map((v) => v[0]));
+    const bgG = median(samples.map((v) => v[1]));
+    const bgB = median(samples.map((v) => v[2]));
 
-      // Safety fallback if the model unexpectedly returns the old blue/cyan
-      // background. These thresholds are deliberately far from human skin.
-      const blue =
-        b >= 145 &&
-        b - r >= 38 &&
-        b - g >= 12 &&
-        r <= 150;
+    const colorDistance = (i: number) => {
+      const dr = d[i] - bgR;
+      const dg = d[i + 1] - bgG;
+      const db = d[i + 2] - bgB;
+      return Math.sqrt(dr * dr + dg * dg + db * db);
+    };
 
-      const cyan =
-        g >= 130 &&
-        b >= 145 &&
-        b - r >= 30 &&
-        g - r >= 20;
+    // Flood-fill only background pixels that are connected to the OUTER BORDER.
+    // This prevents any internal skin/hair colour from being removed even if it
+    // happens to resemble the background.
+    const visited = new Uint8Array(w * h);
+    const queueX = new Int32Array(w * h);
+    const queueY = new Int32Array(w * h);
+    let head = 0;
+    let tail = 0;
 
-      if (magenta || blue || cyan) {
-        d[i + 3] = 0;
+    const enqueue = (x: number, y: number) => {
+      const index = y * w + x;
+      if (visited[index]) return;
+      const i = index * 4;
+      if (d[i + 3] === 0) {
+        visited[index] = 1;
+        return;
+      }
+      // Conservative distance: flat border backgrounds are removed; face/hair
+      // edges are protected unless connected and extremely close to the border
+      // colour.
+      if (colorDistance(i) > 72) return;
+      visited[index] = 1;
+      queueX[tail] = x;
+      queueY[tail] = y;
+      tail++;
+    };
+
+    for (let x = 0; x < w; x++) {
+      enqueue(x, 0);
+      enqueue(x, h - 1);
+    }
+    for (let y = 0; y < h; y++) {
+      enqueue(0, y);
+      enqueue(w - 1, y);
+    }
+
+    while (head < tail) {
+      const x = queueX[head];
+      const y = queueY[head];
+      head++;
+      const i = (y * w + x) * 4;
+      d[i + 3] = 0;
+
+      if (x > 0) enqueue(x - 1, y);
+      if (x + 1 < w) enqueue(x + 1, y);
+      if (y > 0) enqueue(x, y - 1);
+      if (y + 1 < h) enqueue(x, y + 1);
+    }
+
+    // Soft 2-pixel alpha feather on the removed boundary only.
+    // RGB is never altered, so skin tone and hair colour remain unchanged.
+    const alpha = new Uint8ClampedArray(w * h);
+    for (let i = 0; i < w * h; i++) alpha[i] = d[i * 4 + 3];
+
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        const idx = y * w + x;
+        if (alpha[idx] === 0) continue;
+        let transparentNeighbours = 0;
+        for (let yy = -1; yy <= 1; yy++) {
+          for (let xx = -1; xx <= 1; xx++) {
+            if (xx === 0 && yy === 0) continue;
+            if (alpha[(y + yy) * w + (x + xx)] === 0) {
+              transparentNeighbours++;
+            }
+          }
+        }
+        if (transparentNeighbours >= 2) {
+          d[idx * 4 + 3] = Math.min(
+            d[idx * 4 + 3],
+            Math.max(90, 255 - transparentNeighbours * 20),
+          );
+        }
       }
     }
 
@@ -866,18 +948,18 @@ export default function Home() {
       const isMale = /male|ชาย/.test(outfitId);
       const standard = isMale
         ? {
-            // Male: naturally wider neck / shoulder relationship.
-            faceHeight: 210,
-            neckToFaceWidth: 0.62,
-            minNeck: 82,
-            maxNeck: 118,
+            faceHeight: 190,
+            neckToFaceWidth: 0.60,
+            minNeck: 78,
+            maxNeck: 108,
           }
         : {
-            // Female: slightly narrower neck relative to face/head.
-            faceHeight: 205,
-            neckToFaceWidth: 0.56,
-            minNeck: 72,
-            maxNeck: 104,
+            // Smaller than the previous 205px face target so the head is not
+            // oversized relative to the fixed official shoulders.
+            faceHeight: 182,
+            neckToFaceWidth: 0.55,
+            minNeck: 68,
+            maxNeck: 96,
           };
 
       const canvas = document.createElement("canvas");
@@ -889,17 +971,12 @@ export default function Home() {
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
 
-      // 1) Measure the REAL returned face and scale the COMPLETE head/hair
-      // uniformly. Facial features are never scaled independently.
-      const targetFaceHeight = standard.faceHeight;
+      // Uniform scaling of the COMPLETE head/hair unit. No facial feature is
+      // resized independently.
       const targetFaceCenterX = 450;
-      const targetFaceCenterY = 310;
-      const personScale = targetFaceHeight / Math.max(1, face.height);
+      const targetFaceCenterY = isMale ? 302 : 300;
+      const personScale = standard.faceHeight / Math.max(1, face.height);
       const targetFaceWidth = face.width * personScale;
-
-      // Neck width is calculated from the actual face width plus the
-      // male/female standard ratio. This value drives BOTH the person neck mask
-      // and the template collar opening, so the two sides meet naturally.
       const targetNeckWidth = Math.max(
         standard.minNeck,
         Math.min(
@@ -913,6 +990,9 @@ export default function Home() {
       const dx = targetFaceCenterX - sourceFaceCenterX * personScale;
       const dy = targetFaceCenterY - sourceFaceCenterY * personScale;
 
+      // Draw the FULL transparent head/hair/neck layer. Do NOT clip it with a
+      // rectangle or polygon; that was the cause of the visibly cut head/hair.
+      // The AI output itself is already restricted to head/hair/neck only.
       ctx.drawImage(
         person,
         dx,
@@ -921,44 +1001,7 @@ export default function Home() {
         person.naturalHeight * personScale,
       );
 
-      // 2) Keep only a natural head/hair + measured neck corridor.
-      // No triangular skin wedges, old shoulders or civilian clothing may
-      // remain below the head.
-      const neckTopY = 430;
-      const collarJoinY = 620;
-      const topHalf = targetNeckWidth * 0.58;
-      const bottomHalf = targetNeckWidth * 0.50;
-
-      ctx.save();
-      ctx.globalCompositeOperation = "destination-out";
-      ctx.fillStyle = "#000";
-
-      // Clear the entire lower region first...
-      ctx.fillRect(0, neckTopY, 900, 1200 - neckTopY);
-
-      // ...then restore only the measured neck from the original person layer.
-      ctx.restore();
-
-      // Re-draw the person only inside a tapered neck corridor.
-      ctx.save();
-      ctx.beginPath();
-      ctx.moveTo(targetFaceCenterX - topHalf, neckTopY);
-      ctx.lineTo(targetFaceCenterX + topHalf, neckTopY);
-      ctx.lineTo(targetFaceCenterX + bottomHalf, collarJoinY);
-      ctx.lineTo(targetFaceCenterX - bottomHalf, collarJoinY);
-      ctx.closePath();
-      ctx.clip();
-      ctx.drawImage(
-        person,
-        dx,
-        dy,
-        person.naturalWidth * personScale,
-        person.naturalHeight * personScale,
-      );
-      ctx.restore();
-
-      // 3) Build an adaptive REAL template. We do NOT let AI draw the uniform.
-      // Only the immediate inner collar opening is allowed to open/close.
+      // Build an adaptive REAL template. AI never draws this uniform.
       const templateCanvas = document.createElement("canvas");
       templateCanvas.width = 900;
       templateCanvas.height = 1200;
@@ -973,16 +1016,14 @@ export default function Home() {
       const alphaAt = (x: number, y: number) =>
         td[(y * 900 + x) * 4 + 3];
 
-      // This first official template has a 94px transparent opening around y=620.
-      // Convert the measured final neck width back into the template's own
-      // coordinate system, then allow only a conservative ±18% collar change.
+      // Slightly smaller whole-template fit gives safe sleeve margins.
       const templateScale = 0.93;
       const referenceJoinWidth = 94;
       const desiredTemplateJoinWidth =
-        (targetNeckWidth + 10) / templateScale;
+        (targetNeckWidth + (isMale ? 12 : 8)) / templateScale;
       const collarFactor = Math.max(
-        0.82,
-        Math.min(1.18, desiredTemplateJoinWidth / referenceJoinWidth),
+        0.84,
+        Math.min(1.16, desiredTemplateJoinWidth / referenceJoinWidth),
       );
 
       const centerX = 450;
@@ -992,7 +1033,6 @@ export default function Home() {
       for (let y = collarStartY; y <= collarEndY; y++) {
         if (alphaAt(centerX, y) > 24) continue;
 
-        // Find the current transparent opening containing the image centre.
         let left = centerX;
         while (left > 1 && alphaAt(left - 1, y) <= 24) left--;
         let right = centerX;
@@ -1001,8 +1041,6 @@ export default function Home() {
         const currentWidth = right - left + 1;
         if (currentWidth < 8 || currentWidth > 260) continue;
 
-        // Strongest adaptation around the neck/collar join, fading smoothly
-        // toward the top and bottom so lapels/insignia are not distorted.
         const distance = Math.abs(y - 620);
         const weight = Math.max(0, 1 - distance / 95);
         const localFactor = 1 + (collarFactor - 1) * weight;
@@ -1014,7 +1052,6 @@ export default function Home() {
         const newRight = newLeft + newWidth - 1;
 
         if (newWidth > currentWidth) {
-          // OPEN collar: remove only the extra inner-edge pixels.
           for (let x = newLeft; x < left; x++) {
             if (x < 0 || x >= 900) continue;
             td[(y * 900 + x) * 4 + 3] = 0;
@@ -1024,11 +1061,10 @@ export default function Home() {
             td[(y * 900 + x) * 4 + 3] = 0;
           }
         } else if (newWidth < currentWidth) {
-          // CLOSE collar: extend the genuine left/right collar edge inward.
-          // Pixels are copied from the closest opaque real-template edge, so
-          // no new uniform design or AI-generated fabric is introduced.
           let leftSource = left - 1;
-          while (leftSource > 0 && alphaAt(leftSource, y) < 180) leftSource--;
+          while (leftSource > 0 && alphaAt(leftSource, y) < 180) {
+            leftSource--;
+          }
           let rightSource = right + 1;
           while (
             rightSource < 899 &&
@@ -1057,17 +1093,41 @@ export default function Home() {
         }
       }
 
+      // Feather only the INNER collar alpha edge by 1 pixel. This softens the
+      // neck/collar meeting without blurring fabric, insignia or the rest of
+      // the uniform.
+      const alphaCopy = new Uint8ClampedArray(900 * 1200);
+      for (let i = 0; i < 900 * 1200; i++) {
+        alphaCopy[i] = td[i * 4 + 3];
+      }
+      for (let y = 545; y <= 645; y++) {
+        for (let x = 330; x <= 570; x++) {
+          const idx = y * 900 + x;
+          const a = alphaCopy[idx];
+          if (a === 0 || a === 255) continue;
+          let sum = 0;
+          let count = 0;
+          for (let yy = -1; yy <= 1; yy++) {
+            for (let xx = -1; xx <= 1; xx++) {
+              const ni = (y + yy) * 900 + (x + xx);
+              sum += alphaCopy[ni];
+              count++;
+            }
+          }
+          td[idx * 4 + 3] = Math.round(sum / count);
+        }
+      }
+
       templateCtx.putImageData(templatePixels, 0, 0);
 
-      // 4) The complete REAL template is still uniformly scaled/centred so both
-      // outer sleeves remain inside the 3:4 canvas. Only the small collar opening
-      // above was adapted; epaulettes, pins, ribbons, buttons, sleeves and torso
-      // stay exactly from the source template.
       const tw = 900 * templateScale;
       const th = 1200 * templateScale;
       const tx = (900 - tw) / 2;
       const originalTop = 524;
       const ty = originalTop - originalTop * templateScale;
+
+      // Template is drawn last, so it naturally covers the lower neck edges and
+      // creates a photographic-looking join rather than a pasted cut line.
       ctx.drawImage(templateCanvas, tx, ty, tw, th);
 
       return canvas.toDataURL("image/png");
