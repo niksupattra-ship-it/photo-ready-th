@@ -844,8 +844,52 @@ export default function Home() {
         ch = cloth.height * (cw / cloth.width);
       ctx.drawImage(cloth, (900 - cw) / 2, 1200 - ch + 330 + hair * 2, cw, ch);
     }
+    // Export-only micro sharpening: restore fine detail softened by resize/compositing.
+    // No AI call and no changes to geometry, face, skin tone, hair, outfit, background,
+    // framing, zoom, or alpha edges.
+    const sharpened = document.createElement("canvas");
+    sharpened.width = 900;
+    sharpened.height = 1200;
+    const sharpenedCtx = sharpened.getContext("2d", { willReadFrequently: true });
+    if (!sharpenedCtx) return;
+
+    sharpenedCtx.drawImage(canvas, 0, 0);
+    const source = sharpenedCtx.getImageData(0, 0, 900, 1200);
+    const src = source.data;
+    const out = new Uint8ClampedArray(src);
+
+    // Conservative local unsharp mask: enough for camera-like micro-contrast,
+    // capped to avoid halos and artificial skin texture.
+    const strength = 0.18;
+    const maxDelta = 10;
+    const width = 900;
+    const height = 1200;
+
+    for (let yy = 1; yy < height - 1; yy++) {
+      for (let xx = 1; xx < width - 1; xx++) {
+        const i = (yy * width + xx) * 4;
+        const left = i - 4;
+        const right = i + 4;
+        const up = i - width * 4;
+        const down = i + width * 4;
+
+        for (let c = 0; c < 3; c++) {
+          const center = src[i + c];
+          const blur =
+            (src[left + c] + src[right + c] + src[up + c] + src[down + c]) / 4;
+          let delta = (center - blur) * strength;
+          delta = Math.max(-maxDelta, Math.min(maxDelta, delta));
+          out[i + c] = Math.max(0, Math.min(255, Math.round(center + delta)));
+        }
+        out[i + 3] = src[i + 3];
+      }
+    }
+
+    source.data.set(out);
+    sharpenedCtx.putImageData(source, 0, 0);
+
     const a = document.createElement("a");
-    a.href = canvas.toDataURL("image/jpeg", 0.94);
+    a.href = sharpened.toDataURL("image/jpeg", 0.98);
     a.download = "รูปพร้อมใช้.jpg";
     a.click();
   }
