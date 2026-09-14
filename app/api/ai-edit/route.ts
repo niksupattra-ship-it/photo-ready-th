@@ -107,67 +107,55 @@ FINAL SELF-CHECK BEFORE RETURN:
 9) complete uniform edges/details remain inside frame;
 10) only a flat chroma-key background surrounds the person.`;
 
-    const officialPersonOnlyPrompt=`OFFICIAL GOVERNMENT PORTRAIT — PERSON LAYER ONLY.
+    const officialPersonOnlyPrompt=`OFFICIAL GOVERNMENT PORTRAIT — MASKED HEAD/NECK/COLLAR FIT.
 
-The website will composite the exact real government-uniform template AFTER this single AI call. You MUST NOT create, redraw, imitate, redesign, recolor, or output any government-uniform pixels.
+IMAGE 1 already contains:
+- the user's real face,
+- the exact real government-uniform template,
+- the actual visible shoulders and collar geometry.
 
-IMAGE 1 = the real user's face/head source.
-${useHairstyleReference?`IMAGE 2 = the EXACT selected hairstyle (${hairstyle}). It is a HAIR reference only.`:""}
+This is ONE masked edit. Work only inside the transparent mask.
 
-OUTPUT CONTENT:
-Return ONLY:
-- the same real person's complete head,
-- complete selected/original hairstyle,
-- ears when naturally visible,
-- smooth jaw-to-neck transition,
-- a complete natural neck down to its anatomical base,
-- flat #FF00FF everywhere else.
+PRIMARY GOAL:
+Create a natural professional portrait in which the SAME real head/face, the selected/original complete hairstyle, and a realistic neck fit this exact uniform naturally.
 
-ABSOLUTELY NO shoulders, civilian shirt/blouse, clavicle area, chest, torso, government uniform, tie, collar, epaulettes, insignia, ribbons, buttons or sleeves.
+FACE / SKIN — ABSOLUTE LOCK:
+The protected face/jaw is the real photograph and must remain unchanged. Do not regenerate, beautify, whiten, smooth, reshape, age-shift, average or replace it. Preserve exact eyes, eyebrows, nose, lips, cheeks, jaw, chin, skin tone, pores, blemishes, asymmetry, makeup, highlights and shadows.
 
-IDENTITY — ABSOLUTE:
-Keep the original person's face identity and natural skin appearance. Preserve exact eyes, eyelids, eyebrows, nose, nostrils, lips, smile, cheeks, jaw, chin, facial asymmetry, age, complexion, pores, blemishes, fine lines, under-eye detail, makeup, highlights and shadows. Do not beautify, whiten, smooth, average, reshape, reconstruct or replace the face.
+HEAD SIZE:
+Do not enlarge the protected face. Keep the complete head/hair proportion natural relative to the fixed visible shoulder width. The hairstyle may be adjusted around the locked face, but never create a larger face/skull.
 
-The central face in IMAGE 1 is protected by the edit mask. Build editable hair and neck AROUND that locked real face. Never generate a second face, oval face patch, duplicate jaw, duplicate cheek, or skin overlay.
+HAIR:
+${useHairstyleReference?`IMAGE 2 is the exact selected hairstyle (${hairstyle}). Transfer HAIR ONLY. Match parting, front shape, crown volume, side silhouette, tied/untied state, length, layers, ear exposure and EVERY visible endpoint. Never copy IMAGE 2's face, skin, ears, skull, neck, clothing, accessories or lighting.`:`Keep the user's original hairstyle.`}
 
-HEAD / HAIR:
-Do not enlarge the face. Keep the whole head/hair naturally proportioned for a formal half-body portrait.
-Keep comfortable clear margin above and beside the entire hairstyle.
-Never crop or truncate hair at the top, sides, back or endpoints.
-No circular crop, straight cut edge, rectangular boundary or pasted-wig look.
-
-${useHairstyleReference?`HAIRSTYLE REFERENCE:
-Match IMAGE 2's hairstyle exactly: parting, bangs/front section, crown volume, side silhouette, tied/untied state, length, layers, ear exposure and EVERY visible endpoint.
-Transfer HAIR ONLY. Never copy IMAGE 2's face, age, skull shape, skin, eyes, nose, lips, jaw, ears, neck, accessories, clothing, background or lighting.
-Remove any source-hair geometry that contradicts the selected style.`:`Keep IMAGE 1's original hairstyle exactly.`}
+MANDATORY HAIR COMPLETENESS:
+The ENTIRE hairstyle must be visible inside the image. Leave clear margin above the highest hair point and on both sides. Never crop the top, sides, back, ends or tied section. No flat horizontal cut, circular cut, rectangular cut or pasted-wig outline.
 
 NECK:
-Create a continuous anatomical neck beginning naturally under the unchanged jaw.
-The website will measure the real uniform collar opening and calculate final scale/placement after this request, so do NOT try to create clothing or shoulders.
-Keep the neck centered, smooth, natural and long enough to extend behind a real collar.
-No detached neck, no triangular shoulder-skin wedge, no hard horizontal cut, no floating head, no blue/magenta contamination.
+Create a continuous natural neck beginning under the unchanged jaw and extending fully into the real collar opening. The neck must completely fill the visible collar gap. No blue/magenta/background wedge may remain between skin and uniform. Keep neck width anatomically proportional to the locked face while also matching the actual visible collar opening.
 
-SKIN / LIGHT:
-${skinInstruction || "Preserve the source skin tone, lighting and natural photographic texture."}
+INNER COLLAR — LIMITED PERMISSION:
+You MAY reshape ONLY the immediate INNER collar/neck contact area inside the mask so it fits the natural neck:
+- open/close the inner collar slightly,
+- adjust local collar curvature/angle,
+- blend the skin-to-collar junction naturally.
+Do not alter the outer lapels, tie body, shoulder boards, epaulettes, ministry/collar insignia, ribbon bars, medals, buttons, sleeves, shoulder width, torso, fabric colour or uniform framing.
+
+REALISM:
+The final neck-to-collar junction must look like the person was actually photographed wearing the uniform. No pasted head, floating neck, hard seam, triangular skin wedge, blue gap, halo or cutout edge.
+
+${skinInstruction || "Preserve the original skin tone, lighting and natural photographic texture."}
 ${chosen.filter((_, index)=>operations[index]!=="shoulders").join(" ")}
 ${volumeInstruction}
 
-EDGE QUALITY:
-Natural fine hair strands with soft anti-aliased outer edges.
-No cyan/blue/pink/purple/magenta fringe, halo, glow, hard cutout outline or rectangular residue.
-Do not blur internal hair texture or skin.
-
-BACKGROUND:
-Exactly one flat #FF00FF background outside head/hair/ears/neck. No gradient, no scenery, no shadow.
-
 FINAL CHECK:
-1) same real person;
-2) face/skin unchanged;
-3) complete hairstyle, no cut edges;
-4) natural complete neck;
-5) no shoulders/clothing/uniform;
-6) clean photographic hair edge;
-7) flat #FF00FF outside the person.`;
+1) same real face and skin;
+2) complete hairstyle, top not cut;
+3) head size natural relative to shoulders;
+4) neck completely fills the collar opening;
+5) collar adjusted only at the inner neck contact area;
+6) all official details outside that small area unchanged;
+7) professional natural photographic result.`;
 
 
     const body=new FormData();
