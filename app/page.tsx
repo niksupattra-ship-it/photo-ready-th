@@ -1464,8 +1464,11 @@ export default function Home() {
         maskCtx.globalCompositeOperation = "source-over";
         maskCtx.fillStyle = "#000";
 
-        const lockedFaceWidth = face.width * scale * 0.80;
-        const lockedFaceHeight = face.height * scale * 0.72;
+        // Lock a larger identity core so AI cannot repaint eyes, nose, lips,
+        // cheeks or most of the jaw.  Hairline and the lowest jaw/neck transition
+        // stay editable so the neck can still be joined naturally.
+        const lockedFaceWidth = face.width * scale * 0.90;
+        const lockedFaceHeight = face.height * scale * 0.82;
         maskCtx.beginPath();
         maskCtx.ellipse(
           targetFaceCenterX,
@@ -1641,30 +1644,72 @@ export default function Home() {
       const finalCollarWidth = collarWidth * templateScale;
 
       // ------------------------------------------------------------
-      // Compute human proportions from template + actual AI face.
+      // Compute human proportions from the REAL template + complete head.
+      // AUTO-BALANCE RULES (one pass):
+      //   1) scale the whole head/hair unit from shoulder width,
+      //   2) keep face height inside a photographic ID range,
+      //   3) derive neck width from both face anatomy and collar opening,
+      //   4) shorten the visible neck so it never looks stretched.
+      // Nothing here resizes facial features independently.
       // ------------------------------------------------------------
-      // REFERENCE-PROPORTION LOCK:
-      // Match the approved reference portrait supplied by the user.
-      // In that reference the FEMALE face width is ~38–39% of the visible
-      // shoulder width (not ~31% as before). The previous ratio is the direct
-      // reason the head kept coming out too small.
-      //
-      // Scale the COMPLETE head/hair/neck as one unit. Never resize facial
-      // features independently.
-      const faceToShoulderRatio = isMale ? 0.335 : 0.385;
-      const desiredFaceWidth =
-        finalShoulderWidth * faceToShoulderRatio;
+      const patchMeasureForHead = document.createElement("canvas");
+      patchMeasureForHead.width = aiPatch.naturalWidth || aiPatch.width;
+      patchMeasureForHead.height = aiPatch.naturalHeight || aiPatch.height;
+      const headMeasureCtx = patchMeasureForHead.getContext("2d", {
+        willReadFrequently: true,
+      });
+      if (!headMeasureCtx) throw new Error("วัดสัดส่วนศีรษะไม่ได้");
+      headMeasureCtx.drawImage(aiPatch, 0, 0);
+      const headPixels = headMeasureCtx.getImageData(
+        0,
+        0,
+        patchMeasureForHead.width,
+        patchMeasureForHead.height,
+      ).data;
 
-      let personScale =
-        desiredFaceWidth / Math.max(1, face.width);
+      // Measure only the head/hair silhouette around the detected face.
+      // This avoids using the neck as part of the head width.
+      const headSearchTop = Math.max(0, Math.floor(face.originY - face.height * 0.90));
+      const headSearchBottom = Math.min(
+        patchMeasureForHead.height - 1,
+        Math.ceil(face.originY + face.height * 1.08),
+      );
+      const headSearchLeft = Math.max(0, Math.floor(face.originX - face.width * 0.95));
+      const headSearchRight = Math.min(
+        patchMeasureForHead.width - 1,
+        Math.ceil(face.originX + face.width * 1.95),
+      );
 
-      // Reference-calibrated face-height guardrails. These are intentionally
-      // larger than the old values so the head matches the approved portrait
-      // while still preventing an oversized head.
+      let headLeft = patchMeasureForHead.width;
+      let headRight = -1;
+      for (let y = headSearchTop; y <= headSearchBottom; y++) {
+        for (let x = headSearchLeft; x <= headSearchRight; x++) {
+          const a = headPixels[(y * patchMeasureForHead.width + x) * 4 + 3];
+          if (a > 24) {
+            if (x < headLeft) headLeft = x;
+            if (x > headRight) headRight = x;
+          }
+        }
+      }
+
+      const measuredHeadWidth =
+        headRight > headLeft
+          ? headRight - headLeft + 1
+          : face.width * (isMale ? 1.45 : 1.62);
+
+      // A natural studio portrait usually reads best when the COMPLETE head/hair
+      // occupies about 44–47% of the visible shoulder span.  Female hairstyles
+      // often add a little more apparent width than male hairstyles.
+      const targetHeadToShoulder = isMale ? 0.44 : 0.46;
+      const desiredHeadWidth = finalShoulderWidth * targetHeadToShoulder;
+      let personScale = desiredHeadWidth / Math.max(1, measuredHeadWidth);
+
+      // Secondary guardrail from the actual face, not a fixed transform.
+      // This prevents extreme source crops from making the whole head too large
+      // or too small while keeping the face itself uniformly scaled.
       let desiredFaceHeight = face.height * personScale;
-      const minFaceHeight = isMale ? 245 : 250;
-      const maxFaceHeight = isMale ? 300 : 305;
-
+      const minFaceHeight = isMale ? 224 : 228;
+      const maxFaceHeight = isMale ? 278 : 282;
       if (desiredFaceHeight < minFaceHeight) {
         personScale *= minFaceHeight / Math.max(1, desiredFaceHeight);
       } else if (desiredFaceHeight > maxFaceHeight) {
@@ -1674,53 +1719,38 @@ export default function Home() {
       const scaledFaceWidth = face.width * personScale;
       const scaledFaceHeight = face.height * personScale;
 
-      // Neck width comes from both the actual face and the real template collar.
-      // Give slightly more weight to anatomy so the neck does not look pinched
-      // just because the template opening is narrow.
+      // Neck anatomy: the old value was too narrow and made the head look
+      // pasted onto the uniform.  Use a wider anatomical base, then let the
+      // real collar opening set the minimum width at the bottom of the neck.
       const anatomicalNeckWidth =
-        scaledFaceWidth * (isMale ? 0.49 : 0.46);
-
-      // COLLAR-FILL RULE:
-      // The visible neck must actually fill the real template opening.
-      // Use the measured collar opening as the minimum lower-neck target,
-      // while still respecting anatomy so the neck never becomes a straight
-      // rectangular block.
+        scaledFaceWidth * (isMale ? 0.59 : 0.56);
       const collarDrivenNeckWidth =
-        finalCollarWidth * (isMale ? 0.96 : 0.94);
-
+        finalCollarWidth * (isMale ? 0.97 : 0.96);
       const targetNeckWidth = Math.max(
-        isMale ? 88 : 80,
+        isMale ? 92 : 84,
         Math.min(
-          isMale ? 128 : 116,
-          Math.max(
-            anatomicalNeckWidth,
-            collarDrivenNeckWidth,
-          ),
+          isMale ? 132 : 120,
+          Math.max(anatomicalNeckWidth, collarDrivenNeckWidth),
         ),
       );
 
-      // Natural neck length, with enough overlap below the real collar so no
-      // blue/background gap can remain between skin and uniform.
+      // Shorter visible neck = more natural connection to a formal uniform.
+      // The lower portion sits behind the real collar, so no artificial seam
+      // or blue gap can appear.
       const targetNeckLength =
-        scaledFaceHeight * (isMale ? 0.34 : 0.35);
-      const underCollarOverlap = isMale ? 22 : 26;
+        scaledFaceHeight * (isMale ? 0.31 : 0.29);
+      const underCollarOverlap = isMale ? 28 : 30;
 
       const targetJawY =
-        finalCollarY -
-        targetNeckLength +
-        underCollarOverlap;
+        finalCollarY - targetNeckLength + underCollarOverlap;
 
-      const sourceFaceCenterX =
-        face.originX + face.width / 2;
-      const sourceJawY =
-        face.originY + face.height;
+      const sourceFaceCenterX = face.originX + face.width / 2;
+      const sourceJawY = face.originY + face.height;
 
       const dx =
-        finalShoulderCenterX -
-        sourceFaceCenterX * personScale;
+        finalShoulderCenterX - sourceFaceCenterX * personScale;
       const dy =
-        targetJawY -
-        sourceJawY * personScale;
+        targetJawY - sourceJawY * personScale;
 
       // ------------------------------------------------------------
       // Measure the ACTUAL AI neck width below the jaw.
@@ -1787,7 +1817,7 @@ export default function Home() {
       const neckHorizontalScale = Math.max(
         1,
         Math.min(
-          1.28,
+          1.18,
           targetNeckWidth / Math.max(1, renderedAiNeckWidth),
         ),
       );
@@ -1929,14 +1959,23 @@ export default function Home() {
 
       // Protect only the identity-critical central face. Hairline and jaw/neck edges
       // remain available for the AI/template transition, avoiding a pasted-face seam.
-      const sx = sf.originX + sf.width * 0.08;
-      const sy = sf.originY + sf.height * 0.13;
-      const sw = sf.width * 0.84;
-      const sh = sf.height * 0.77;
-      const dx = rf.originX + rf.width * 0.08;
-      const dy = rf.originY + rf.height * 0.13;
-      const dw = rf.width * 0.84;
-      const dh = rf.height * 0.77;
+      const sx = sf.originX + sf.width * 0.055;
+      const sy = sf.originY + sf.height * 0.10;
+      const sw = sf.width * 0.89;
+      const sh = sf.height * 0.80;
+
+      // IMPORTANT: restore the real face with ONE UNIFORM scale.
+      // Never stretch X and Y independently because that subtly changes eye
+      // spacing, nose shape, jaw width and the user's real facial structure.
+      const scaleX = rf.width / Math.max(1, sf.width);
+      const scaleY = rf.height / Math.max(1, sf.height);
+      const identityScale = scaleX * 0.55 + scaleY * 0.45;
+      const dw = sw * identityScale;
+      const dh = sh * identityScale;
+      const resultFaceCenterX = rf.originX + rf.width / 2;
+      const resultFaceCenterY = rf.originY + rf.height * 0.50;
+      const dx = resultFaceCenterX - dw / 2;
+      const dy = resultFaceCenterY - dh * 0.50;
 
       const patch = document.createElement("canvas");
       patch.width = canvas.width;
@@ -1958,8 +1997,8 @@ export default function Home() {
       mc.ellipse(
         rf.originX + rf.width / 2,
         rf.originY + rf.height * 0.515,
-        rf.width * 0.39,
-        rf.height * 0.36,
+        rf.width * 0.445,
+        rf.height * 0.395,
         0,
         0,
         Math.PI * 2,
@@ -2073,10 +2112,18 @@ export default function Home() {
       }
       let normalizedImage: string;
       if (isOfficialTemplate) {
-        normalizedImage = await finalizeOfficialAiBalancedResult(
+        const officialComposite = await finalizeOfficialAiBalancedResult(
           data.image,
           outfit.image,
           outfit.id,
+        );
+        // Final identity lock: put the original photographic face pixels back
+        // after ALL AI and geometry work.  AI may create hair/neck transition,
+        // but eyes, nose, lips, cheeks, facial structure and natural skin remain
+        // from the uploaded photo.
+        normalizedImage = await restoreOriginalFacePixels(
+          baseOriginal,
+          officialComposite,
         );
       } else if (templatePersonMode) {
         setProcessMessage("กำลังประกอบใบหน้า/คอกับไฟล์ชุดจริงโดยไม่ให้ AI วาดชุดใหม่…");
