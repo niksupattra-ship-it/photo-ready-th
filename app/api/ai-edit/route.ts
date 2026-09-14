@@ -29,6 +29,7 @@ export async function POST(request:Request){
     const hairVolume=String(input.get("hairVolume")||"คงเดิม");
     const outfitLabel=String(input.get("outfitLabel")||"ชุดที่เลือก");
     const outfitCategory=String(input.get("outfitCategory")||"");
+    const isJobApplication=outfitCategory==="สมัครงาน";
     const skinStyle=String(input.get("skinStyle")||"ธรรมชาติ");
     const skinStrength=Math.max(0,Math.min(100,Number(input.get("skinStrength")||15)));
     const hairstyleRef=input.get("hairstyleRef");
@@ -154,7 +155,10 @@ same real person; exact selected hairstyle when requested; natural neck; absolut
     }
     body.append("prompt",isOfficialTemplate?officialPersonOnlyPrompt:prompt+lockedFramingPrompt);
     body.append("input_fidelity","high");
-    body.append("quality",isOfficialTemplate?"medium":"high");
+    body.append(
+      "quality",
+      isOfficialTemplate || isJobApplication ? "medium" : "high",
+    );
     body.append("output_format","png");
     body.append("size",isOfficialTemplate?"1024x1024":"1024x1536");
     body.append("n","1");
