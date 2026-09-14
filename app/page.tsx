@@ -33,6 +33,7 @@ const outfits = [
   { id: "job-men-open", label: "สูทชายคอเปิด", sub: "สมัครงาน", category: "สมัครงาน", image: "/templates/job-navy-suit-tie-men.png", tone: "suit" },
   { id: "job-white-women", label: "เสื้อขาวหญิง", sub: "สมัครงาน", category: "สมัครงาน", image: "/templates/job-white-shirt-women.png", tone: "student" },
   { id: "job-white-men", label: "เสื้อขาวชาย", sub: "สมัครงาน", category: "สมัครงาน", image: "/templates/job-white-shirt-men.png", tone: "student" },
+  { id: "official-female-practitioner-finance", label: "ปฏิบัติการหญิง", sub: "กระทรวงการคลัง", category: "ข้าราชการ", image: "/templates/official-female-practitioner-finance.png", tone: "official" },
   { id: "women-suit", label: "สูทหญิง", sub: "ข้าราชการ", category: "ข้าราชการ", image: "/templates/women-suit.png", tone: "suit" },
   { id: "men-suit", label: "สูทชาย", sub: "ข้าราชการ", category: "ข้าราชการ", image: "/templates/men-suit.png", tone: "suit" },
   { id: "women-student", label: "นักเรียนหญิง", sub: "นักเรียน", category: "นักเรียน", image: "/templates/women-student.png", tone: "student" },
