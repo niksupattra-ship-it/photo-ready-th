@@ -124,6 +124,46 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
+async function optimizeAiInputBlob(
+  blob: Blob,
+  maxLongEdge: number,
+): Promise<Blob> {
+  // Cost optimization only: downscale oversized AI INPUTS to a resolution
+  // that is already sufficient for the 1024x1536 final render.
+  // Never upscale, never crop, never change aspect ratio, and keep PNG/alpha.
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    const image = await loadImage(objectUrl);
+    const width = image.naturalWidth || image.width;
+    const height = image.naturalHeight || image.height;
+    const longEdge = Math.max(width, height);
+
+    if (!width || !height || longEdge <= maxLongEdge) return blob;
+
+    const scale = maxLongEdge / longEdge;
+    const targetWidth = Math.max(1, Math.round(width * scale));
+    const targetHeight = Math.max(1, Math.round(height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return blob;
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(image, 0, 0, targetWidth, targetHeight);
+
+    return await new Promise<Blob>((resolve) => {
+      canvas.toBlob(
+        (optimized) => resolve(optimized ?? blob),
+        "image/png",
+      );
+    });
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
 export default function Home() {
   const inputRef = useRef<HTMLInputElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -761,10 +801,19 @@ export default function Home() {
         fetch(baseOriginal),
         fetch(outfit.image),
       ]);
-      const [blob, outfitBlob] = await Promise.all([
+      const [sourceBlob, outfitSourceBlob] = await Promise.all([
         source.blob(),
         outfitSource.blob(),
       ]);
+
+      // Keep model / prompt / input_fidelity / quality / output size unchanged.
+      // Only oversized INPUT files are reduced before upload to avoid paying
+      // for phone-camera pixels that exceed the final model render resolution.
+      const [blob, outfitBlob] = await Promise.all([
+        optimizeAiInputBlob(sourceBlob, 1536),
+        optimizeAiInputBlob(outfitSourceBlob, 1536),
+      ]);
+
       const form = new FormData();
       form.append("image", blob, "portrait.png");
       form.append("outfit", outfitBlob, "outfit-reference.png");
@@ -779,9 +828,13 @@ export default function Home() {
         (option) => option.id === hairstyle,
       );
       form.append("hairstyle", selectedHairstyle?.label || "ทรงเดิม");
-      if (selectedHairstyle?.image) {
+      if (aiSelected.includes("hairstyle") && selectedHairstyle?.image) {
         const hairstyleSource = await fetch(selectedHairstyle.image);
-        const hairstyleBlob = await hairstyleSource.blob();
+        const hairstyleSourceBlob = await hairstyleSource.blob();
+        const hairstyleBlob = await optimizeAiInputBlob(
+          hairstyleSourceBlob,
+          1280,
+        );
         form.append("hairstyleRef", hairstyleBlob, `${hairstyle}.png`);
       }
       const response = await fetch("/api/ai-edit", {
