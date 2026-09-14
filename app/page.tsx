@@ -1437,34 +1437,14 @@ export default function Home() {
         const maskCtx = maskCanvas.getContext("2d");
         if (!maskCtx) throw new Error("สร้าง AI mask ไม่ได้");
 
-        maskCtx.fillStyle = "#000";
-        maskCtx.fillRect(0, 0, inputSize, inputSize);
-        maskCtx.globalCompositeOperation = "destination-out";
+        // IMPORTANT: everything outside the identity face is editable.
+        // Do NOT use an ellipse/trapezoid edit window: its geometric boundary
+        // was the cause of the straight hair/neck cut visible in official mode.
+        maskCtx.clearRect(0, 0, inputSize, inputSize);
 
-        // Large editable hair region with lots of margin. No circular crop is
-        // used in final compositing, so this only tells AI where it may edit.
-        maskCtx.beginPath();
-        maskCtx.ellipse(
-          targetFaceCenterX,
-          305,
-          245,
-          285,
-          0,
-          0,
-          Math.PI * 2,
-        );
-        maskCtx.fill();
-
-        // Editable neck corridor down to its anatomical base.
-        maskCtx.beginPath();
-        maskCtx.moveTo(315, 390);
-        maskCtx.lineTo(453, 390);
-        maskCtx.lineTo(495, 690);
-        maskCtx.lineTo(273, 690);
-        maskCtx.closePath();
-        maskCtx.fill();
-
-        // Restore/lock the real face as a continuous large region.
+        // Protect only the real identity face. Hair, ears, jaw edge, neck, source
+        // clothes and source background remain editable so AI can return one
+        // continuous head+hair+neck layer on chroma with no rectangular residue.
         maskCtx.globalCompositeOperation = "source-over";
         maskCtx.fillStyle = "#000";
 
@@ -1482,14 +1462,6 @@ export default function Home() {
         );
         maskCtx.fill();
 
-        // Lock the jaw centre; AI starts reshaping below the jaw rather than
-        // reconstructing the user's face.
-        maskCtx.fillRect(
-          targetFaceCenterX - lockedFaceWidth * 0.34,
-          targetFaceCenterY + lockedFaceHeight * 0.29,
-          lockedFaceWidth * 0.68,
-          34,
-        );
 
         const [imageBlob, maskBlob] = await Promise.all([
           new Promise<Blob>((resolve) =>
@@ -1717,81 +1689,19 @@ export default function Home() {
         sourceJawY * personScale;
 
       // ------------------------------------------------------------
-      // Soft anatomical mask: keep ALL hair/head untouched above the jaw;
-      // below jaw, keep only a feathered natural neck corridor.
+      // Draw the COMPLETE AI person layer with one uniform transform.
+      // No post-AI geometric mask is allowed here. The previous jaw-height
+      // rectangle + narrow neck corridor physically clipped long hairstyles
+      // and produced the pasted/cut appearance. The AI output is already
+      // chroma-keyed to head + complete hair + ears + neck only.
       // ------------------------------------------------------------
-      const personCanvas = document.createElement("canvas");
-      personCanvas.width = 900;
-      personCanvas.height = 1200;
-      const pc = personCanvas.getContext("2d");
-      if (!pc) throw new Error("สร้างเลเยอร์บุคคลไม่ได้");
-      pc.imageSmoothingEnabled = true;
-      pc.imageSmoothingQuality = "high";
-
-      pc.drawImage(
+      ctx.drawImage(
         aiPatch,
         dx,
         dy,
         (aiPatch.naturalWidth || aiPatch.width) * personScale,
         (aiPatch.naturalHeight || aiPatch.height) * personScale,
       );
-
-      const maskCanvas = document.createElement("canvas");
-      maskCanvas.width = 900;
-      maskCanvas.height = 1200;
-      const mc = maskCanvas.getContext("2d");
-      if (!mc) throw new Error("สร้าง mask คอไม่ได้");
-
-      mc.filter = "blur(4px)";
-      mc.fillStyle = "#fff";
-
-      // Preserve the COMPLETE head/hair without geometric clipping.
-      mc.fillRect(0, 0, 900, targetJawY + 8);
-
-      // Natural neck corridor from jaw into the template collar.
-      const jawHalfWidth =
-        scaledFaceWidth * (isMale ? 0.28 : 0.26);
-      const neckHalfWidth = targetNeckWidth / 2;
-
-      mc.beginPath();
-      mc.moveTo(
-        finalShoulderCenterX - jawHalfWidth,
-        targetJawY - 4,
-      );
-      mc.lineTo(
-        finalShoulderCenterX + jawHalfWidth,
-        targetJawY - 4,
-      );
-      mc.bezierCurveTo(
-        finalShoulderCenterX + jawHalfWidth * 0.92,
-        targetJawY + targetNeckLength * 0.35,
-        finalShoulderCenterX + neckHalfWidth,
-        finalCollarY - 22,
-        finalShoulderCenterX + neckHalfWidth,
-        finalCollarY + underCollarOverlap,
-      );
-      mc.lineTo(
-        finalShoulderCenterX - neckHalfWidth,
-        finalCollarY + underCollarOverlap,
-      );
-      mc.bezierCurveTo(
-        finalShoulderCenterX - neckHalfWidth,
-        finalCollarY - 22,
-        finalShoulderCenterX - jawHalfWidth * 0.92,
-        targetJawY + targetNeckLength * 0.35,
-        finalShoulderCenterX - jawHalfWidth,
-        targetJawY - 4,
-      );
-      mc.closePath();
-      mc.fill();
-      mc.filter = "none";
-
-      pc.globalCompositeOperation = "destination-in";
-      pc.drawImage(maskCanvas, 0, 0);
-      pc.globalCompositeOperation = "source-over";
-
-      // Person first...
-      ctx.drawImage(personCanvas, 0, 0);
 
       // ...then the exact REAL template on top. This hides the lower neck under
       // the collar naturally. No AI-generated shoulder board, insignia, ribbon,
