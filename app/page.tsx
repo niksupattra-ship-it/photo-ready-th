@@ -484,8 +484,9 @@ export default function Home() {
     // We normalize by the detected face, then move/scale the WHOLE generated person
     // as one rigid image. This keeps head/body proportions intact while making every
     // outfit land at the same waist-up framing.
-    ctx.fillStyle = backgroundColor;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // Keep the normalized AI result transparent. The selected background color
+    // is rendered by the website stage/export layer, never by the AI image.
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     try {
       const { FilesetResolver, FaceDetector } = await import("@mediapipe/tasks-vision");
@@ -509,9 +510,7 @@ export default function Home() {
           // enough to leave the complete shoulders, arms and waist visible below.
           const targetFaceHeight = 210;
           const targetFaceCenterX = 450;
-          // Keep the exact same person scale/proportions; only lower the whole portrait
-          // to create ~20% more blue headroom above the hair than the previous framing.
-          const targetFaceCenterY = 396;
+          const targetFaceCenterY = 330;
           const faceCenterX = face.originX + face.width / 2;
           const faceCenterY = face.originY + face.height / 2;
           // Keep the AI-composed body proportions, but make the finished 3:4
@@ -577,7 +576,6 @@ export default function Home() {
       form.append("image", blob, "portrait.png");
       form.append("outfit", outfitBlob, "outfit-reference.png");
       form.append("outfitLabel", `${outfit.label} (${outfit.sub})`);
-      form.append("background", bg);
       form.append("operations", JSON.stringify(aiSelected));
       form.append("hairVolume", hairVolume);
       form.append("skinStyle", skinStyle);
@@ -621,44 +619,10 @@ export default function Home() {
     }
   }
   async function changeBackground(color: string) {
-    if (!aiComposited || !aiBaseImage) {
-      setBg(color);
-      return;
-    }
-    if (backgroundProcessing || color === bg) return;
-    setBackgroundProcessing(true);
-    setProcessMessage("AI กำลังเปลี่ยนเฉพาะพื้นหลังและเก็บขอบภาพ…");
-    try {
-      const source = await fetch(aiBaseImage);
-      const blob = await source.blob();
-      const form = new FormData();
-      form.append("image", blob, "v3-portrait.png");
-      form.append("background", color);
-      const response = await fetch("/api/change-background", {
-        method: "POST",
-        body: form,
-      });
-      const data = (await response.json()) as {
-        image?: string;
-        error?: string;
-      };
-      if (!response.ok || !data.image)
-        throw new Error(data.error || "AI เปลี่ยนพื้นหลังไม่สำเร็จ");
-      const normalizedImage = await normalizeAiResultToThreeFour(data.image, color);
-      setOriginal(normalizedImage);
-      setAiBaseImage(normalizedImage);
-      setCutout(null);
-      setBg(color);
-      setProcessMessage("AI เปลี่ยนพื้นหลังและเก็บขอบเรียบร้อยแล้ว");
-    } catch (e) {
-      setProcessMessage(
-        e instanceof Error
-          ? e.message
-          : "AI เปลี่ยนพื้นหลังไม่สำเร็จ กรุณาลองอีกครั้ง",
-      );
-    } finally {
-      setBackgroundProcessing(false);
-    }
+    // AI results are transparent PNG cutouts. Background color is a pure UI layer,
+    // so changing it must never call AI or alter the generated person pixels.
+    setBg(color);
+    setProcessMessage("เปลี่ยนสีพื้นหลังเรียบร้อยแล้ว");
   }
   async function removeBackground() {
     setProcessing(true);
