@@ -1550,6 +1550,61 @@ export default function Home() {
         );
         maskCtx.fill();
 
+        // Keep a local, zero-cost copy of the ORIGINAL transformed face.
+        // It is restored after AI so identity and source skin cannot drift.
+        const identityFull = document.createElement("canvas");
+        identityFull.width = 900;
+        identityFull.height = 1200;
+        const identityFullCtx = identityFull.getContext("2d");
+        if (!identityFullCtx) throw new Error("สร้างชั้นล็อกใบหน้าไม่ได้");
+        identityFullCtx.clearRect(0, 0, 900, 1200);
+        identityFullCtx.imageSmoothingEnabled = true;
+        identityFullCtx.imageSmoothingQuality = "high";
+        identityFullCtx.drawImage(
+          source, dx, dy,
+          (source.naturalWidth || source.width) * scale,
+          (source.naturalHeight || source.height) * scale,
+        );
+
+        const identityCanvas = document.createElement("canvas");
+        identityCanvas.width = inputSize;
+        identityCanvas.height = inputSize;
+        const identityCtx = identityCanvas.getContext("2d");
+        if (!identityCtx) throw new Error("สร้างชั้นล็อกใบหน้าไม่ได้");
+        identityCtx.drawImage(
+          identityFull, cropX, cropY, cropSize, cropSize,
+          0, 0, inputSize, inputSize,
+        );
+
+        // Feathered face-only alpha: preserve original photographic face but
+        // leave hair, jaw-to-neck transition and neck fully available to AI.
+        const faceMaskCanvas = document.createElement("canvas");
+        faceMaskCanvas.width = inputSize;
+        faceMaskCanvas.height = inputSize;
+        const faceMaskCtx = faceMaskCanvas.getContext("2d");
+        if (!faceMaskCtx) throw new Error("สร้างมาสก์ล็อกใบหน้าไม่ได้");
+        const faceCx = fx(faceLockCenterX);
+        const faceCy = fy(faceLockCenterY - finalFaceHeight * 0.02);
+        const faceRx = (finalFaceWidth * 0.58 / cropSize) * inputSize;
+        const faceRy = (finalFaceHeight * 0.50 / cropSize) * inputSize;
+        const feather = Math.max(5, inputSize * 0.012);
+        const grad = faceMaskCtx.createRadialGradient(
+          faceCx, faceCy, Math.max(1, Math.min(faceRx, faceRy) - feather),
+          faceCx, faceCy, Math.max(faceRx, faceRy),
+        );
+        grad.addColorStop(0, "rgba(0,0,0,1)");
+        grad.addColorStop(0.82, "rgba(0,0,0,1)");
+        grad.addColorStop(1, "rgba(0,0,0,0)");
+        faceMaskCtx.fillStyle = grad;
+        faceMaskCtx.beginPath();
+        faceMaskCtx.ellipse(faceCx, faceCy, faceRx, faceRy, 0, 0, Math.PI * 2);
+        faceMaskCtx.fill();
+        identityCtx.globalCompositeOperation = "destination-in";
+        identityCtx.drawImage(faceMaskCanvas, 0, 0);
+        identityCtx.globalCompositeOperation = "source-over";
+
+        const identityOverlaySrc = identityCanvas.toDataURL("image/png");
+
         const [imageBlob, maskBlob] = await Promise.all([
           new Promise<Blob>((resolve) =>
             inputCanvas.toBlob(
@@ -1571,6 +1626,7 @@ export default function Home() {
           cropX,
           cropY,
           cropSize,
+          identityOverlaySrc,
         };
       } finally {
         detector.close();
@@ -1583,10 +1639,12 @@ export default function Home() {
   async function finalizeOfficialAiBalancedResult(
     aiPatchSrc: string,
     templateSrc: string,
+    identityOverlaySrc: string,
   ) {
-    const [aiPatchRaw, template] = await Promise.all([
+    const [aiPatchRaw, template, identityOverlay] = await Promise.all([
       officialPersonToTransparent(aiPatchSrc),
       loadImage(templateSrc),
+      loadImage(identityOverlaySrc),
     ]);
     const aiPatch = await loadImage(aiPatchRaw);
 
@@ -1619,6 +1677,17 @@ export default function Home() {
       cropY,
       cropSize,
       cropSize,
+    );
+
+    // Restore the untouched ORIGINAL face locally (no API call). The feathered
+    // alpha ends before hair/neck, so AI can still solve hairstyle and anatomy
+    // while eyes/nose/lips/skin/face shape remain photographic source pixels.
+    ctx.drawImage(
+      identityOverlay,
+      0, 0,
+      identityOverlay.naturalWidth || identityOverlay.width,
+      identityOverlay.naturalHeight || identityOverlay.height,
+      cropX, cropY, cropSize, cropSize,
     );
 
     // Restore the exact REAL government-uniform PNG as the LAST layer.
@@ -1726,6 +1795,7 @@ export default function Home() {
         ? await finalizeOfficialAiBalancedResult(
             data.image,
             outfit.image,
+            officialPrepared!.identityOverlaySrc,
           )
         : await normalizeAiResultToThreeFour(
             await chromaKeyToTransparent(data.image),
