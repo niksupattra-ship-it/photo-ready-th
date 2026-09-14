@@ -107,68 +107,67 @@ FINAL SELF-CHECK BEFORE RETURN:
 9) complete uniform edges/details remain inside frame;
 10) only a flat chroma-key background surrounds the person.`;
 
-    const officialPersonOnlyPrompt=`OFFICIAL GOVERNMENT PORTRAIT — SINGLE MASKED EDIT.
+    const officialPersonOnlyPrompt=`OFFICIAL GOVERNMENT PORTRAIT — PERSON LAYER ONLY.
 
-IMPORTANT: IMAGE 1 ALREADY CONTAINS THE EXACT REAL GOVERNMENT-UNIFORM TEMPLATE in the correct final framing. The uniform outside the transparent edit mask is LOCKED and must remain unchanged.
+The website will composite the exact real government-uniform template AFTER this single AI call. You MUST NOT create, redraw, imitate, redesign, recolor, or output any government-uniform pixels.
 
-EDITABLE AREA:
-You may edit ONLY the transparent mask covering:
-- the real person's complete head and selected/original hairstyle,
+IMAGE 1 = the real user's face/head source.
+${useHairstyleReference?`IMAGE 2 = the EXACT selected hairstyle (${hairstyle}). It is a HAIR reference only.`:""}
+
+OUTPUT CONTENT:
+Return ONLY:
+- the same real person's complete head,
+- complete selected/original hairstyle,
 - ears when naturally visible,
-- jaw-to-neck transition,
-- natural neck,
-- and only the immediate INNER collar contact area needed to make the neck fit naturally.
+- smooth jaw-to-neck transition,
+- a complete natural neck down to its anatomical base,
+- flat #FF00FF everywhere else.
 
-DO NOT modify outside the mask. DO NOT recreate or redesign the government uniform. DO NOT change epaulettes, ministry/collar insignia, ribbon bars, tie, buttons, lapels, sleeves, shoulder width, torso shape, fabric colour, or garment framing.
+ABSOLUTELY NO shoulders, civilian shirt/blouse, clavicle area, chest, torso, government uniform, tie, collar, epaulettes, insignia, ribbons, buttons or sleeves.
 
-PRIMARY GOAL:
-Make the person look naturally photographed wearing THIS EXACT visible uniform. Balance the selected/original HAIR and the NECK relative to the fixed visible shoulders and collar. The central face pixels are protected by the mask and are the immutable photographic identity source. Do not attempt to regenerate, reinterpret or replace the face. The final anatomy must resemble a professional formal portrait, not a pasted head.
+IDENTITY — ABSOLUTE:
+Keep the original person's face identity and natural skin appearance. Preserve exact eyes, eyelids, eyebrows, nose, nostrils, lips, smile, cheeks, jaw, chin, facial asymmetry, age, complexion, pores, blemishes, fine lines, under-eye detail, makeup, highlights and shadows. Do not beautify, whiten, smooth, average, reshape, reconstruct or replace the face.
 
-HEAD / BODY PROPORTION:
-- the website has already placed the REAL face at a deliberately smaller formal-portrait scale before this edit;
-- the protected face size and position are FINAL: DO NOT enlarge, shrink, move, regenerate or reshape the locked face;
-- use the fixed visible shoulder width and collar only to shape the editable hairstyle and neck naturally AROUND that locked face;
-- do not create a larger skull/face around the protected face;
-- keep comfortable headroom and side margin;
-- preserve the COMPLETE selected/original hairstyle: no circular crop, no chopped sides, no missing back hair, no artificial straight or rounded cut boundary.
+The central face in IMAGE 1 is protected by the edit mask. Build editable hair and neck AROUND that locked real face. Never generate a second face, oval face patch, duplicate jaw, duplicate cheek, or skin overlay.
+
+HEAD / HAIR:
+Do not enlarge the face. Keep the whole head/hair naturally proportioned for a formal half-body portrait.
+Keep comfortable clear margin above and beside the entire hairstyle.
+Never crop or truncate hair at the top, sides, back or endpoints.
+No circular crop, straight cut edge, rectangular boundary or pasted-wig look.
+
+${useHairstyleReference?`HAIRSTYLE REFERENCE:
+Match IMAGE 2's hairstyle exactly: parting, bangs/front section, crown volume, side silhouette, tied/untied state, length, layers, ear exposure and EVERY visible endpoint.
+Transfer HAIR ONLY. Never copy IMAGE 2's face, age, skull shape, skin, eyes, nose, lips, jaw, ears, neck, accessories, clothing, background or lighting.
+Remove any source-hair geometry that contradicts the selected style.`:`Keep IMAGE 1's original hairstyle exactly.`}
 
 NECK:
-Create a continuous natural neck from the unchanged LOCKED jaw into the visible real collar.
-Use the locked face width and the visible collar opening to choose a realistic neck width.
-Keep the neck centered and anatomically continuous; do not expose shoulders or civilian clothing.
-Neck length should generally be about 0.33–0.50 of head length where anatomically appropriate.
-Extend the lower neck far enough behind the collar so the real template can overlap it naturally in final compositing.
-No blue/magenta gap, no floating head, no detached neck, no triangular skin wedge, no horizontal cut line and no pasted-head seam.
-
-COLLAR PERMISSION — LIMITED BUT ACTIVE:
-You MAY reshape ONLY the immediate INNER collar/neck opening inside the transparent mask so the real neck enters the uniform naturally. Open it slightly, close it slightly, or change the local curve/angle as needed for anatomical fit. The edit must look like the same real uniform tailored around this neck, with a seamless photographic junction.
-
-ABSOLUTELY LOCKED UNIFORM DETAILS:
-Do NOT alter, move, redraw, regenerate, recolor or replace epaulettes/shoulder boards, ministry or collar insignia, pins, ribbon bars, medals, tie body, buttons, sleeves, outer lapels, shoulder width, torso silhouette, fabric texture, or overall uniform framing. Outside the immediate inner-collar contact zone, the government-uniform template is immutable.
-
-IDENTITY LOCK — ABSOLUTE:
-The protected face/jaw in image 1 is the ONLY real face and must remain the same photograph. Preserve exact eyes, eyelids, brows, nose, nostrils, lips, smile, cheeks, jaw, chin, facial asymmetry, complexion, pores, blemishes, fine lines, under-eye detail, makeup, highlights and shadows. No beautification, whitening, smoothing, age change, face replacement, face reconstruction or identity transfer.
-
-NEVER create a second face, face-shaped patch, oval skin layer, duplicate jaw, duplicate cheeks, or reconstructed face around/over the protected original. The transition from editable hair/neck into the protected original face must occur only at natural boundaries such as hairline and jaw-to-neck anatomy. If the selected hairstyle reference contains another face, ignore that face completely.
-
-${useHairstyleReference?`IMAGE 2 is the EXACT selected hairstyle (${hairstyle}). Transfer HAIR ONLY. Match its parting, bangs/front shape, crown volume, side silhouette, tied/untied state, length, layers, ear exposure and EVERY visible endpoint. The hairstyle reference is NOT a person reference: never copy its face, age, head shape, skin, eyes, nose, lips, jaw, ears, neck, clothing, accessories or lighting. Remove contradictory source-hair remnants, but build the selected hair around the locked original face.`:`Keep the original hairstyle from image 1 exactly.`}
-
-HAIR EDGE:
-Keep the complete hairstyle inside the frame with natural fine strands and soft edges. No clipping, halo, glow, magenta/blue/cyan fringe, rectangular residue or hard cutout line.
+Create a continuous anatomical neck beginning naturally under the unchanged jaw.
+The website will measure the real uniform collar opening and calculate final scale/placement after this request, so do NOT try to create clothing or shoulders.
+Keep the neck centered, smooth, natural and long enough to extend behind a real collar.
+No detached neck, no triangular shoulder-skin wedge, no hard horizontal cut, no floating head, no blue/magenta contamination.
 
 SKIN / LIGHT:
-${skinInstruction || "Preserve the original skin tone, lighting and natural skin texture."}
+${skinInstruction || "Preserve the source skin tone, lighting and natural photographic texture."}
 ${chosen.filter((_, index)=>operations[index]!=="shoulders").join(" ")}
 ${volumeInstruction}
 
+EDGE QUALITY:
+Natural fine hair strands with soft anti-aliased outer edges.
+No cyan/blue/pink/purple/magenta fringe, halo, glow, hard cutout outline or rectangular residue.
+Do not blur internal hair texture or skin.
+
+BACKGROUND:
+Exactly one flat #FF00FF background outside head/hair/ears/neck. No gradient, no scenery, no shadow.
+
 FINAL CHECK:
-1) exact same person;
-2) selected hairstyle correct when requested;
-3) head/hair proportion balanced against the fixed real shoulders;
-4) natural continuous neck into collar;
-5) no pasted-head appearance;
-6) uniform outside mask unchanged;
-7) no newly invented government-uniform details.`;
+1) same real person;
+2) face/skin unchanged;
+3) complete hairstyle, no cut edges;
+4) natural complete neck;
+5) no shoulders/clothing/uniform;
+6) clean photographic hair edge;
+7) flat #FF00FF outside the person.`;
 
 
     const body=new FormData();
