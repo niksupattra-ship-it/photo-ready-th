@@ -1422,9 +1422,11 @@ export default function Home() {
 
         // Rough starting person placement only. AI will balance head/neck inside
         // the editable mask while seeing the exact real collar and shoulders.
-        const targetFaceHeight = isMale ? 245 : 235;
+        // Keep the real face modest relative to the fixed official shoulders.
+        // The previous values made the head noticeably oversized.
+        const targetFaceHeight = isMale ? 218 : 208;
         const targetFaceCenterX = 450;
-        const targetFaceCenterY = isMale ? 295 : 292;
+        const targetFaceCenterY = isMale ? 302 : 300;
         const scale = targetFaceHeight / Math.max(1, face.height);
         const sourceFaceCenterX = face.originX + face.width / 2;
         const sourceFaceCenterY = face.originY + face.height / 2;
@@ -1459,9 +1461,10 @@ export default function Home() {
         // AI sees a square crop containing head + neck + the real collar/shoulder
         // geometry. No separate uniform reference is uploaded, so this does NOT
         // add another paid image input.
-        const cropX = 110;
-        const cropY = 55;
-        const cropSize = 680;
+        // Larger crop = more safety margin above/around the complete hairstyle.
+        const cropX = 90;
+        const cropY = 20;
+        const cropSize = 720;
         const inputSize = 768;
 
         const inputCanvas = document.createElement("canvas");
@@ -1498,36 +1501,60 @@ export default function Home() {
         const fx = (x: number) => ((x - cropX) / cropSize) * inputSize;
         const fy = (y: number) => ((y - cropY) / cropSize) * inputSize;
 
-        // Large enough for AI to increase/decrease head scale naturally without
-        // clipping the selected hairstyle.
+        // Editable region: complete hairstyle silhouette + neck. There is ample
+        // margin so hair can never be clipped by the AI crop.
         maskCtx.beginPath();
         maskCtx.ellipse(
           fx(450),
-          fy(285),
-          fx(230) - fx(0),
-          fy(270) - fy(0),
+          fy(290),
+          fx(220) - fx(0),
+          fy(255) - fy(0),
           0,
           0,
           Math.PI * 2,
         );
         maskCtx.fill();
 
-        // Neck + inner-collar blend area. This intentionally excludes epaulettes,
-        // insignia, ribbons, buttons, sleeves and outer lapels.
+        // Neck + ONLY the immediate inner-collar contact zone.
         maskCtx.beginPath();
-        maskCtx.moveTo(fx(345), fy(385));
-        maskCtx.lineTo(fx(555), fy(385));
-        maskCtx.lineTo(fx(585), fy(655));
-        maskCtx.lineTo(fx(315), fy(655));
+        maskCtx.moveTo(fx(365), fy(388));
+        maskCtx.lineTo(fx(535), fy(388));
+        maskCtx.lineTo(fx(555), fy(620));
+        maskCtx.lineTo(fx(345), fy(620));
         maskCtx.closePath();
+        maskCtx.fill();
+
+        // FACE IDENTITY LOCK:
+        // Paint the central real face back as OPAQUE in the mask after opening
+        // the hair/neck region. Opaque pixels are protected from the edit API.
+        // This keeps eyes/nose/lips/cheeks/jaw/skin as the original photo while
+        // still allowing hairstyle edges and the neck to be balanced.
+        maskCtx.globalCompositeOperation = "source-over";
+        maskCtx.fillStyle = "#000";
+
+        const finalFaceWidth = face.width * scale;
+        const finalFaceHeight = face.height * scale;
+        const faceLockCenterX = targetFaceCenterX;
+        const faceLockCenterY =
+          targetFaceCenterY + finalFaceHeight * 0.06;
+
+        maskCtx.beginPath();
+        maskCtx.ellipse(
+          fx(faceLockCenterX),
+          fy(faceLockCenterY),
+          (finalFaceWidth * 0.57 / cropSize) * inputSize,
+          (finalFaceHeight * 0.50 / cropSize) * inputSize,
+          0,
+          0,
+          Math.PI * 2,
+        );
         maskCtx.fill();
 
         const [imageBlob, maskBlob] = await Promise.all([
           new Promise<Blob>((resolve) =>
             inputCanvas.toBlob(
               (blob) => resolve(blob ?? sourceBlob),
-              "image/jpeg",
-              0.94,
+              "image/png",
             ),
           ),
           new Promise<Blob>((resolve) =>
@@ -1583,17 +1610,17 @@ export default function Home() {
 
     // Paste back ONLY the same central editable geometry. This guarantees AI
     // cannot change the uniform outside head/neck/inner-collar contact.
-    const cropX = 110;
-    const cropY = 55;
-    const cropSize = 680;
+    const cropX = 90;
+    const cropY = 20;
+    const cropSize = 720;
 
     ctx.save();
     ctx.beginPath();
-    ctx.ellipse(450, 285, 230, 270, 0, 0, Math.PI * 2);
-    ctx.moveTo(345, 385);
-    ctx.lineTo(555, 385);
-    ctx.lineTo(585, 655);
-    ctx.lineTo(315, 655);
+    ctx.ellipse(450, 290, 220, 255, 0, 0, Math.PI * 2);
+    ctx.moveTo(365, 388);
+    ctx.lineTo(535, 388);
+    ctx.lineTo(555, 620);
+    ctx.lineTo(345, 620);
     ctx.closePath();
     ctx.clip();
     ctx.drawImage(
