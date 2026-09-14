@@ -509,7 +509,9 @@ export default function Home() {
           // enough to leave the complete shoulders, arms and waist visible below.
           const targetFaceHeight = 210;
           const targetFaceCenterX = 450;
-          const targetFaceCenterY = 330;
+          // Keep the exact same person scale/proportions; only lower the whole portrait
+          // to create ~20% more blue headroom above the hair than the previous framing.
+          const targetFaceCenterY = 396;
           const faceCenterX = face.originX + face.width / 2;
           const faceCenterY = face.originY + face.height / 2;
           // Keep the AI-composed body proportions, but make the finished 3:4
