@@ -1433,30 +1433,50 @@ export default function Home() {
         const dx = targetFaceCenterX - sourceFaceCenterX * scale;
         const dy = targetFaceCenterY - sourceFaceCenterY * scale;
 
-        // Draw source only in a generous head/hair/neck rough mask.
-        // Its hard edge never reaches the final output: this whole area is
-        // editable by AI in the SAME single request.
-        ctx.save();
-        ctx.beginPath();
-        ctx.ellipse(
-          450,
-          285,
-          isMale ? 205 : 195,
-          isMale ? 245 : 238,
-          0,
-          0,
-          Math.PI * 2,
-        );
-        ctx.rect(360, 390, 180, 245);
-        ctx.clip();
-        ctx.drawImage(
+        // Draw the real source face/head through a SOFT local mask.
+        // No hard ellipse/rectangle edge is allowed around the face.
+        const personLayer = document.createElement("canvas");
+        personLayer.width = 900;
+        personLayer.height = 1200;
+        const personLayerCtx = personLayer.getContext("2d");
+        if (!personLayerCtx) throw new Error("สร้างเลเยอร์บุคคลไม่ได้");
+
+        personLayerCtx.drawImage(
           source,
           dx,
           dy,
           (source.naturalWidth || source.width) * scale,
           (source.naturalHeight || source.height) * scale,
         );
-        ctx.restore();
+
+        const personMask = document.createElement("canvas");
+        personMask.width = 900;
+        personMask.height = 1200;
+        const personMaskCtx = personMask.getContext("2d");
+        if (!personMaskCtx) throw new Error("สร้าง mask บุคคลไม่ได้");
+
+        // Feathered mask boundary is kept OUTSIDE the face. The AI will edit
+        // hair/neck around the locked face, so no visible circular face overlay.
+        personMaskCtx.filter = "blur(10px)";
+        personMaskCtx.fillStyle = "#fff";
+        personMaskCtx.beginPath();
+        personMaskCtx.ellipse(
+          450,
+          292,
+          isMale ? 220 : 210,
+          isMale ? 265 : 258,
+          0,
+          0,
+          Math.PI * 2,
+        );
+        personMaskCtx.fill();
+        personMaskCtx.fillRect(355, 385, 190, 255);
+        personMaskCtx.filter = "none";
+
+        personLayerCtx.globalCompositeOperation = "destination-in";
+        personLayerCtx.drawImage(personMask, 0, 0);
+        personLayerCtx.globalCompositeOperation = "source-over";
+        ctx.drawImage(personLayer, 0, 0);
 
         // AI sees a square crop containing head + neck + the real collar/shoulder
         // geometry. No separate uniform reference is uploaded, so this does NOT
@@ -1501,34 +1521,39 @@ export default function Home() {
         const fx = (x: number) => ((x - cropX) / cropSize) * inputSize;
         const fy = (y: number) => ((y - cropY) / cropSize) * inputSize;
 
-        // Editable region: complete hairstyle silhouette + neck. There is ample
-        // margin so hair can never be clipped by the AI crop.
+        // EDIT MASK DESIGN:
+        // - Hair: editable around the OUTER hair silhouette.
+        // - Face/jaw: protected as one large continuous photographic region.
+        // - Neck + immediate inner collar: editable for natural anatomical fit.
+        //
+        // This removes the old small oval "face patch" effect.
+
+        // A) outer hair/head edit area
         maskCtx.beginPath();
         maskCtx.ellipse(
           fx(450),
-          fy(290),
-          fx(220) - fx(0),
-          fy(255) - fy(0),
+          fy(292),
+          fx(232) - fx(0),
+          fy(274) - fy(0),
           0,
           0,
           Math.PI * 2,
         );
         maskCtx.fill();
 
-        // Neck + ONLY the immediate inner-collar contact zone.
+        // B) neck + INNER collar only. Keep this narrow enough that epaulettes,
+        // pins, ribbons, buttons and outer lapels are always protected.
         maskCtx.beginPath();
-        maskCtx.moveTo(fx(365), fy(388));
-        maskCtx.lineTo(fx(535), fy(388));
-        maskCtx.lineTo(fx(555), fy(620));
-        maskCtx.lineTo(fx(345), fy(620));
+        maskCtx.moveTo(fx(372), fy(390));
+        maskCtx.lineTo(fx(528), fy(390));
+        maskCtx.lineTo(fx(548), fy(520));
+        maskCtx.lineTo(fx(352), fy(520));
         maskCtx.closePath();
         maskCtx.fill();
 
-        // FACE IDENTITY LOCK:
-        // Paint the central real face back as OPAQUE in the mask after opening
-        // the hair/neck region. Opaque pixels are protected from the edit API.
-        // This keeps eyes/nose/lips/cheeks/jaw/skin as the original photo while
-        // still allowing hairstyle edges and the neck to be balanced.
+        // C) protect the COMPLETE real face/jaw, not just a small central oval.
+        // The protected boundary lies at the natural hairline/outer cheek/jaw
+        // region, avoiding a visible artificial face-on-face circle.
         maskCtx.globalCompositeOperation = "source-over";
         maskCtx.fillStyle = "#000";
 
@@ -1536,74 +1561,28 @@ export default function Home() {
         const finalFaceHeight = face.height * scale;
         const faceLockCenterX = targetFaceCenterX;
         const faceLockCenterY =
-          targetFaceCenterY + finalFaceHeight * 0.06;
+          targetFaceCenterY + finalFaceHeight * 0.08;
 
         maskCtx.beginPath();
         maskCtx.ellipse(
           fx(faceLockCenterX),
           fy(faceLockCenterY),
-          (finalFaceWidth * 0.66 / cropSize) * inputSize,
-          (finalFaceHeight * 0.60 / cropSize) * inputSize,
+          (finalFaceWidth * 0.78 / cropSize) * inputSize,
+          (finalFaceHeight * 0.72 / cropSize) * inputSize,
           0,
           0,
           Math.PI * 2,
         );
         maskCtx.fill();
 
-        // Keep a local, zero-cost copy of the ORIGINAL transformed face.
-        // It is restored after AI so identity and source skin cannot drift.
-        const identityFull = document.createElement("canvas");
-        identityFull.width = 900;
-        identityFull.height = 1200;
-        const identityFullCtx = identityFull.getContext("2d");
-        if (!identityFullCtx) throw new Error("สร้างชั้นล็อกใบหน้าไม่ได้");
-        identityFullCtx.clearRect(0, 0, 900, 1200);
-        identityFullCtx.imageSmoothingEnabled = true;
-        identityFullCtx.imageSmoothingQuality = "high";
-        identityFullCtx.drawImage(
-          source, dx, dy,
-          (source.naturalWidth || source.width) * scale,
-          (source.naturalHeight || source.height) * scale,
+        // Lock a short bridge under the jaw as well; AI begins reshaping only
+        // below this point so the jaw/face skin remains the original photograph.
+        maskCtx.fillRect(
+          fx(faceLockCenterX - finalFaceWidth * 0.38),
+          fy(targetFaceCenterY + finalFaceHeight * 0.40),
+          (finalFaceWidth * 0.76 / cropSize) * inputSize,
+          (finalFaceHeight * 0.16 / cropSize) * inputSize,
         );
-
-        const identityCanvas = document.createElement("canvas");
-        identityCanvas.width = inputSize;
-        identityCanvas.height = inputSize;
-        const identityCtx = identityCanvas.getContext("2d");
-        if (!identityCtx) throw new Error("สร้างชั้นล็อกใบหน้าไม่ได้");
-        identityCtx.drawImage(
-          identityFull, cropX, cropY, cropSize, cropSize,
-          0, 0, inputSize, inputSize,
-        );
-
-        // Feathered face-only alpha: preserve original photographic face but
-        // leave hair, jaw-to-neck transition and neck fully available to AI.
-        const faceMaskCanvas = document.createElement("canvas");
-        faceMaskCanvas.width = inputSize;
-        faceMaskCanvas.height = inputSize;
-        const faceMaskCtx = faceMaskCanvas.getContext("2d");
-        if (!faceMaskCtx) throw new Error("สร้างมาสก์ล็อกใบหน้าไม่ได้");
-        const faceCx = fx(faceLockCenterX);
-        const faceCy = fy(faceLockCenterY - finalFaceHeight * 0.02);
-        const faceRx = (finalFaceWidth * 0.58 / cropSize) * inputSize;
-        const faceRy = (finalFaceHeight * 0.50 / cropSize) * inputSize;
-        const feather = Math.max(5, inputSize * 0.012);
-        const grad = faceMaskCtx.createRadialGradient(
-          faceCx, faceCy, Math.max(1, Math.min(faceRx, faceRy) - feather),
-          faceCx, faceCy, Math.max(faceRx, faceRy),
-        );
-        grad.addColorStop(0, "rgba(0,0,0,1)");
-        grad.addColorStop(0.82, "rgba(0,0,0,1)");
-        grad.addColorStop(1, "rgba(0,0,0,0)");
-        faceMaskCtx.fillStyle = grad;
-        faceMaskCtx.beginPath();
-        faceMaskCtx.ellipse(faceCx, faceCy, faceRx, faceRy, 0, 0, Math.PI * 2);
-        faceMaskCtx.fill();
-        identityCtx.globalCompositeOperation = "destination-in";
-        identityCtx.drawImage(faceMaskCanvas, 0, 0);
-        identityCtx.globalCompositeOperation = "source-over";
-
-        const identityOverlaySrc = identityCanvas.toDataURL("image/png");
 
         const [imageBlob, maskBlob] = await Promise.all([
           new Promise<Blob>((resolve) =>
@@ -1626,7 +1605,6 @@ export default function Home() {
           cropX,
           cropY,
           cropSize,
-          identityOverlaySrc,
         };
       } finally {
         detector.close();
@@ -1639,12 +1617,10 @@ export default function Home() {
   async function finalizeOfficialAiBalancedResult(
     aiPatchSrc: string,
     templateSrc: string,
-    identityOverlaySrc: string,
   ) {
-    const [aiPatchRaw, template, identityOverlay] = await Promise.all([
+    const [aiPatchRaw, template] = await Promise.all([
       officialPersonToTransparent(aiPatchSrc),
       loadImage(templateSrc),
-      loadImage(identityOverlaySrc),
     ]);
     const aiPatch = await loadImage(aiPatchRaw);
 
@@ -1657,16 +1633,11 @@ export default function Home() {
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
 
-    // ROOT-CAUSE FIX:
-    // Do NOT clip the returned head/hair/neck with an ellipse, rectangle,
-    // trapezoid, or any other hard geometric mask. The previous ellipse clip
-    // was exactly why long/side hair was visibly chopped into a rounded shape.
-    //
-    // Paste the COMPLETE transparent AI patch first.
     const cropX = 90;
     const cropY = 20;
     const cropSize = 720;
 
+    // Paste the COMPLETE AI patch. No ellipse/polygon clip around hair or face.
     ctx.drawImage(
       aiPatch,
       0,
@@ -1679,20 +1650,10 @@ export default function Home() {
       cropSize,
     );
 
-    // Restore the untouched ORIGINAL face locally (no API call). The feathered
-    // alpha ends before hair/neck, so AI can still solve hairstyle and anatomy
-    // while eyes/nose/lips/skin/face shape remain photographic source pixels.
-    ctx.drawImage(
-      identityOverlay,
-      0, 0,
-      identityOverlay.naturalWidth || identityOverlay.width,
-      identityOverlay.naturalHeight || identityOverlay.height,
-      cropX, cropY, cropSize, cropSize,
-    );
-
-    // Restore the exact REAL government-uniform PNG as the LAST layer.
-    // The lower neck therefore continues behind the real collar naturally,
-    // while every uniform detail remains the real template.
+    // Build a protected real-template overlay.
+    // Restore the exact government uniform EVERYWHERE except the immediate
+    // inner-collar contact zone. That small hole is where AI is allowed to
+    // adapt the collar to the natural neck.
     const templateScale = 0.93;
     const tw = 900 * templateScale;
     const th = 1200 * templateScale;
@@ -1700,7 +1661,41 @@ export default function Home() {
     const originalTop = 524;
     const ty = originalTop - originalTop * templateScale;
 
-    ctx.drawImage(template, tx, ty, tw, th);
+    const overlay = document.createElement("canvas");
+    overlay.width = 900;
+    overlay.height = 1200;
+    const overlayCtx = overlay.getContext("2d");
+    if (!overlayCtx) throw new Error("ล็อกเทมเพลตชุดไม่ได้");
+    overlayCtx.imageSmoothingEnabled = true;
+    overlayCtx.imageSmoothingQuality = "high";
+    overlayCtx.drawImage(template, tx, ty, tw, th);
+
+    // Erase only the inner neck/collar junction from the top template layer.
+    // Epaulettes, insignia, ribbon bars, tie body, buttons, sleeves, shoulder
+    // geometry and outer lapels stay the exact source template.
+    overlayCtx.globalCompositeOperation = "destination-out";
+    overlayCtx.fillStyle = "#000";
+    overlayCtx.beginPath();
+    overlayCtx.moveTo(385, 360);
+    overlayCtx.quadraticCurveTo(410, 420, 400, 475);
+    overlayCtx.lineTo(500, 475);
+    overlayCtx.quadraticCurveTo(490, 420, 515, 360);
+    overlayCtx.closePath();
+    overlayCtx.fill();
+
+    // Soft 2px-equivalent feather at the collar-hole boundary only.
+    overlayCtx.filter = "blur(1.5px)";
+    overlayCtx.beginPath();
+    overlayCtx.moveTo(388, 362);
+    overlayCtx.quadraticCurveTo(414, 420, 404, 472);
+    overlayCtx.lineTo(496, 472);
+    overlayCtx.quadraticCurveTo(486, 420, 512, 362);
+    overlayCtx.closePath();
+    overlayCtx.fill();
+    overlayCtx.filter = "none";
+    overlayCtx.globalCompositeOperation = "source-over";
+
+    ctx.drawImage(overlay, 0, 0);
 
     return canvas.toDataURL("image/png");
   }
@@ -1795,7 +1790,6 @@ export default function Home() {
         ? await finalizeOfficialAiBalancedResult(
             data.image,
             outfit.image,
-            officialPrepared!.identityOverlaySrc,
           )
         : await normalizeAiResultToThreeFour(
             await chromaKeyToTransparent(data.image),
