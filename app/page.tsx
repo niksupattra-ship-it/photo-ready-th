@@ -1414,9 +1414,9 @@ export default function Home() {
 
         // Keep the real face large enough for identity fidelity while leaving
         // generous safety margin for the COMPLETE hairstyle and full neck.
-        const targetFaceHeight = 220;
+        const targetFaceHeight = 205;
         const targetFaceCenterX = inputSize / 2;
-        const targetFaceCenterY = 310;
+        const targetFaceCenterY = 315;
 
         const scale = targetFaceHeight / Math.max(1, face.height);
         const sourceFaceCenterX = face.originX + face.width / 2;
@@ -1631,19 +1631,27 @@ export default function Home() {
       // ------------------------------------------------------------
       // Compute human proportions from template + actual AI face.
       // ------------------------------------------------------------
-      // Formal portrait target: face width relative to shoulder width.
-      // These ranges avoid both "big head" and "tiny head".
-      const faceToShoulderRatio = isMale ? 0.285 : 0.31;
+      // REFERENCE-PROPORTION LOCK:
+      // Match the approved reference portrait supplied by the user.
+      // In that reference the FEMALE face width is ~38–39% of the visible
+      // shoulder width (not ~31% as before). The previous ratio is the direct
+      // reason the head kept coming out too small.
+      //
+      // Scale the COMPLETE head/hair/neck as one unit. Never resize facial
+      // features independently.
+      const faceToShoulderRatio = isMale ? 0.335 : 0.385;
       const desiredFaceWidth =
         finalShoulderWidth * faceToShoulderRatio;
 
       let personScale =
         desiredFaceWidth / Math.max(1, face.width);
 
-      // Safety clamp from actual face height.
+      // Reference-calibrated face-height guardrails. These are intentionally
+      // larger than the old values so the head matches the approved portrait
+      // while still preventing an oversized head.
       let desiredFaceHeight = face.height * personScale;
-      const minFaceHeight = isMale ? 225 : 215;
-      const maxFaceHeight = isMale ? 270 : 260;
+      const minFaceHeight = isMale ? 245 : 250;
+      const maxFaceHeight = isMale ? 300 : 305;
 
       if (desiredFaceHeight < minFaceHeight) {
         personScale *= minFaceHeight / Math.max(1, desiredFaceHeight);
@@ -1654,26 +1662,29 @@ export default function Home() {
       const scaledFaceWidth = face.width * personScale;
       const scaledFaceHeight = face.height * personScale;
 
-      // Neck width calculated from BOTH real face and actual collar opening.
+      // Neck width comes from both the actual face and the real template collar.
+      // Give slightly more weight to anatomy so the neck does not look pinched
+      // just because the template opening is narrow.
       const anatomicalNeckWidth =
-        scaledFaceWidth * (isMale ? 0.47 : 0.43);
+        scaledFaceWidth * (isMale ? 0.49 : 0.46);
       const collarDrivenNeckWidth =
-        finalCollarWidth * (isMale ? 0.84 : 0.80);
+        finalCollarWidth * (isMale ? 0.88 : 0.84);
 
       const targetNeckWidth = Math.max(
-        isMale ? 82 : 72,
+        isMale ? 86 : 78,
         Math.min(
-          isMale ? 118 : 104,
-          anatomicalNeckWidth * 0.55 +
-            collarDrivenNeckWidth * 0.45,
+          isMale ? 124 : 112,
+          anatomicalNeckWidth * 0.68 +
+            collarDrivenNeckWidth * 0.32,
         ),
       );
 
-      // Natural neck length. Put its lower 12–16 px under the real collar so the
-      // uniform overlaps the skin like a real photograph.
+      // Approved reference has a natural, not elongated, neck.
+      // Keep the neck shorter than the old 0.40-face-height value and overlap
+      // the lower neck behind the real collar for a photographic join.
       const targetNeckLength =
-        scaledFaceHeight * (isMale ? 0.38 : 0.40);
-      const underCollarOverlap = isMale ? 12 : 16;
+        scaledFaceHeight * (isMale ? 0.34 : 0.35);
+      const underCollarOverlap = isMale ? 14 : 18;
 
       const targetJawY =
         finalCollarY -
