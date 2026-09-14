@@ -471,7 +471,7 @@ export default function Home() {
     }
   }
 
-  async function normalizeAiResultToThreeFour(src: string) {
+  async function normalizeAiResultToThreeFour(src: string, backgroundColor = bg) {
     const image = await loadImage(src);
     const canvas = document.createElement("canvas");
     canvas.width = 900;
@@ -479,16 +479,67 @@ export default function Home() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return src;
 
-    // AI portrait output is 2:3 (1024x1536), while the app standard is 3:4.
-    // Center-crop only the small excess height so the visible result exactly fills
-    // the 3:4 frame. The API prompt intentionally generates extra body/arm margin
-    // for this crop, so we do not stretch the person and do not leave side bars.
-    const scale = Math.max(canvas.width / image.naturalWidth, canvas.height / image.naturalHeight);
+    // IMPORTANT: every generated outfit must finish at the SAME camera distance.
+    // Do not let the raw AI crop or the outfit-reference crop decide the final scale.
+    // We normalize by the detected face, then move/scale the WHOLE generated person
+    // as one rigid image. This keeps head/body proportions intact while making every
+    // outfit land at the same waist-up framing.
+    ctx.fillStyle = backgroundColor;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    try {
+      const { FilesetResolver, FaceDetector } = await import("@mediapipe/tasks-vision");
+      const vision = await FilesetResolver.forVisionTasks(
+        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm",
+      );
+      const detector = await FaceDetector.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetPath:
+            "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/latest/blaze_face_short_range.tflite",
+        },
+        runningMode: "IMAGE",
+        minDetectionConfidence: 0.5,
+      });
+
+      try {
+        const face = detector.detect(image).detections[0]?.boundingBox;
+        if (face) {
+          // Fixed final framing for EVERY outfit / hairstyle / source photo.
+          // 900x1200 final canvas: face bbox ~17.5% of image height, centered high
+          // enough to leave the complete shoulders, arms and waist visible below.
+          const targetFaceHeight = 210;
+          const targetFaceCenterX = 450;
+          const targetFaceCenterY = 330;
+          const faceCenterX = face.originX + face.width / 2;
+          const faceCenterY = face.originY + face.height / 2;
+          const scale = targetFaceHeight / Math.max(1, face.height);
+          const drawWidth = image.naturalWidth * scale;
+          const drawHeight = image.naturalHeight * scale;
+          const drawX = targetFaceCenterX - faceCenterX * scale;
+          const drawY = targetFaceCenterY - faceCenterY * scale;
+
+          ctx.drawImage(image, drawX, drawY, drawWidth, drawHeight);
+          return canvas.toDataURL("image/png");
+        }
+      } finally {
+        detector.close();
+      }
+    } catch {
+      // Fall through to a deterministic no-face fallback.
+    }
+
+    // Fallback: fit the complete raw AI result inside the 3:4 canvas instead of
+    // zooming/cropping it. This still favors the wider half-body composition.
+    const scale = Math.min(canvas.width / image.naturalWidth, canvas.height / image.naturalHeight);
     const drawWidth = image.naturalWidth * scale;
     const drawHeight = image.naturalHeight * scale;
-    const drawX = (canvas.width - drawWidth) / 2;
-    const drawY = (canvas.height - drawHeight) / 2;
-    ctx.drawImage(image, drawX, drawY, drawWidth, drawHeight);
+    ctx.drawImage(
+      image,
+      (canvas.width - drawWidth) / 2,
+      (canvas.height - drawHeight) / 2,
+      drawWidth,
+      drawHeight,
+    );
     return canvas.toDataURL("image/png");
   }
 
@@ -536,8 +587,11 @@ export default function Home() {
       };
       if (!response.ok || !data.image)
         throw new Error(data.error || "AI ปรับภาพไม่สำเร็จ");
-      const normalizedImage = await normalizeAiResultToThreeFour(data.image);
+      const normalizedImage = await normalizeAiResultToThreeFour(data.image, bg);
       setOriginal(normalizedImage);
+      setZoom(100);
+      setX(0);
+      setY(0);
       setAiBaseImage(normalizedImage);
       setAiComposited(true);
       setCutout(null);
@@ -576,7 +630,7 @@ export default function Home() {
       };
       if (!response.ok || !data.image)
         throw new Error(data.error || "AI เปลี่ยนพื้นหลังไม่สำเร็จ");
-      const normalizedImage = await normalizeAiResultToThreeFour(data.image);
+      const normalizedImage = await normalizeAiResultToThreeFour(data.image, color);
       setOriginal(normalizedImage);
       setAiBaseImage(normalizedImage);
       setCutout(null);
