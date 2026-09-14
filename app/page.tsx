@@ -838,6 +838,7 @@ export default function Home() {
   async function composeOfficialExactTemplate(
     personSrc: string,
     templateSrc: string,
+    outfitId: string,
   ) {
     const [{ FilesetResolver, FaceDetector }, person, template] =
       await Promise.all([
@@ -862,6 +863,23 @@ export default function Home() {
       const face = detector.detect(person).detections[0]?.boundingBox;
       if (!face) throw new Error("ไม่พบใบหน้าหลังประมวลผล");
 
+      const isMale = /male|ชาย/.test(outfitId);
+      const standard = isMale
+        ? {
+            // Male: naturally wider neck / shoulder relationship.
+            faceHeight: 210,
+            neckToFaceWidth: 0.62,
+            minNeck: 82,
+            maxNeck: 118,
+          }
+        : {
+            // Female: slightly narrower neck relative to face/head.
+            faceHeight: 205,
+            neckToFaceWidth: 0.56,
+            minNeck: 72,
+            maxNeck: 104,
+          };
+
       const canvas = document.createElement("canvas");
       canvas.width = 900;
       canvas.height = 1200;
@@ -871,50 +889,186 @@ export default function Home() {
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
 
-      // Fit the COMPLETE head/hair as one unit. This target is intentionally
-      // smaller than a close headshot and was chosen for the real official
-      // template shoulder width.
-      const targetFaceHeight = 205;
+      // 1) Measure the REAL returned face and scale the COMPLETE head/hair
+      // uniformly. Facial features are never scaled independently.
+      const targetFaceHeight = standard.faceHeight;
       const targetFaceCenterX = 450;
       const targetFaceCenterY = 310;
-      const scale = targetFaceHeight / Math.max(1, face.height);
+      const personScale = targetFaceHeight / Math.max(1, face.height);
+      const targetFaceWidth = face.width * personScale;
+
+      // Neck width is calculated from the actual face width plus the
+      // male/female standard ratio. This value drives BOTH the person neck mask
+      // and the template collar opening, so the two sides meet naturally.
+      const targetNeckWidth = Math.max(
+        standard.minNeck,
+        Math.min(
+          standard.maxNeck,
+          targetFaceWidth * standard.neckToFaceWidth,
+        ),
+      );
+
       const sourceFaceCenterX = face.originX + face.width / 2;
       const sourceFaceCenterY = face.originY + face.height / 2;
-      const dx = targetFaceCenterX - sourceFaceCenterX * scale;
-      const dy = targetFaceCenterY - sourceFaceCenterY * scale;
+      const dx = targetFaceCenterX - sourceFaceCenterX * personScale;
+      const dy = targetFaceCenterY - sourceFaceCenterY * personScale;
 
       ctx.drawImage(
         person,
         dx,
         dy,
-        person.naturalWidth * scale,
-        person.naturalHeight * scale,
+        person.naturalWidth * personScale,
+        person.naturalHeight * personScale,
       );
 
-      // Delete any accidental AI clothing/background below the jaw while
-      // keeping a natural centred neck. This is deterministic Canvas cleanup,
-      // not another AI call.
+      // 2) Keep only a natural head/hair + measured neck corridor.
+      // No triangular skin wedges, old shoulders or civilian clothing may
+      // remain below the head.
+      const neckTopY = 430;
+      const collarJoinY = 620;
+      const topHalf = targetNeckWidth * 0.58;
+      const bottomHalf = targetNeckWidth * 0.50;
+
       ctx.save();
       ctx.globalCompositeOperation = "destination-out";
       ctx.fillStyle = "#000";
-      // Clear lower-left and lower-right zones; keep only a central neck path.
-      ctx.fillRect(0, 440, 365, 300);
-      ctx.fillRect(535, 440, 365, 300);
-      // Below the collar join no person pixels are allowed.
-      ctx.fillRect(0, 610, 900, 590);
+
+      // Clear the entire lower region first...
+      ctx.fillRect(0, neckTopY, 900, 1200 - neckTopY);
+
+      // ...then restore only the measured neck from the original person layer.
       ctx.restore();
 
-      // Exact real template: preserved pixel-for-pixel, only uniformly scaled
-      // and centred to leave safe left/right arm margins. No AI-created
-      // government-uniform pixels are used.
+      // Re-draw the person only inside a tapered neck corridor.
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(targetFaceCenterX - topHalf, neckTopY);
+      ctx.lineTo(targetFaceCenterX + topHalf, neckTopY);
+      ctx.lineTo(targetFaceCenterX + bottomHalf, collarJoinY);
+      ctx.lineTo(targetFaceCenterX - bottomHalf, collarJoinY);
+      ctx.closePath();
+      ctx.clip();
+      ctx.drawImage(
+        person,
+        dx,
+        dy,
+        person.naturalWidth * personScale,
+        person.naturalHeight * personScale,
+      );
+      ctx.restore();
+
+      // 3) Build an adaptive REAL template. We do NOT let AI draw the uniform.
+      // Only the immediate inner collar opening is allowed to open/close.
+      const templateCanvas = document.createElement("canvas");
+      templateCanvas.width = 900;
+      templateCanvas.height = 1200;
+      const templateCtx = templateCanvas.getContext("2d", {
+        willReadFrequently: true,
+      });
+      if (!templateCtx) throw new Error("ปรับช่องคอเทมเพลตไม่ได้");
+      templateCtx.drawImage(template, 0, 0, 900, 1200);
+
+      const templatePixels = templateCtx.getImageData(0, 0, 900, 1200);
+      const td = templatePixels.data;
+      const alphaAt = (x: number, y: number) =>
+        td[(y * 900 + x) * 4 + 3];
+
+      // This first official template has a 94px transparent opening around y=620.
+      // Convert the measured final neck width back into the template's own
+      // coordinate system, then allow only a conservative ±18% collar change.
       const templateScale = 0.93;
+      const referenceJoinWidth = 94;
+      const desiredTemplateJoinWidth =
+        (targetNeckWidth + 10) / templateScale;
+      const collarFactor = Math.max(
+        0.82,
+        Math.min(1.18, desiredTemplateJoinWidth / referenceJoinWidth),
+      );
+
+      const centerX = 450;
+      const collarStartY = 535;
+      const collarEndY = 652;
+
+      for (let y = collarStartY; y <= collarEndY; y++) {
+        if (alphaAt(centerX, y) > 24) continue;
+
+        // Find the current transparent opening containing the image centre.
+        let left = centerX;
+        while (left > 1 && alphaAt(left - 1, y) <= 24) left--;
+        let right = centerX;
+        while (right < 898 && alphaAt(right + 1, y) <= 24) right++;
+
+        const currentWidth = right - left + 1;
+        if (currentWidth < 8 || currentWidth > 260) continue;
+
+        // Strongest adaptation around the neck/collar join, fading smoothly
+        // toward the top and bottom so lapels/insignia are not distorted.
+        const distance = Math.abs(y - 620);
+        const weight = Math.max(0, 1 - distance / 95);
+        const localFactor = 1 + (collarFactor - 1) * weight;
+        const newWidth = Math.max(
+          6,
+          Math.round(currentWidth * localFactor),
+        );
+        const newLeft = Math.round(centerX - newWidth / 2);
+        const newRight = newLeft + newWidth - 1;
+
+        if (newWidth > currentWidth) {
+          // OPEN collar: remove only the extra inner-edge pixels.
+          for (let x = newLeft; x < left; x++) {
+            if (x < 0 || x >= 900) continue;
+            td[(y * 900 + x) * 4 + 3] = 0;
+          }
+          for (let x = right + 1; x <= newRight; x++) {
+            if (x < 0 || x >= 900) continue;
+            td[(y * 900 + x) * 4 + 3] = 0;
+          }
+        } else if (newWidth < currentWidth) {
+          // CLOSE collar: extend the genuine left/right collar edge inward.
+          // Pixels are copied from the closest opaque real-template edge, so
+          // no new uniform design or AI-generated fabric is introduced.
+          let leftSource = left - 1;
+          while (leftSource > 0 && alphaAt(leftSource, y) < 180) leftSource--;
+          let rightSource = right + 1;
+          while (
+            rightSource < 899 &&
+            alphaAt(rightSource, y) < 180
+          ) {
+            rightSource++;
+          }
+
+          const lsi = (y * 900 + leftSource) * 4;
+          const rsi = (y * 900 + rightSource) * 4;
+
+          for (let x = left; x < newLeft; x++) {
+            const i = (y * 900 + x) * 4;
+            td[i] = td[lsi];
+            td[i + 1] = td[lsi + 1];
+            td[i + 2] = td[lsi + 2];
+            td[i + 3] = td[lsi + 3];
+          }
+          for (let x = newRight + 1; x <= right; x++) {
+            const i = (y * 900 + x) * 4;
+            td[i] = td[rsi];
+            td[i + 1] = td[rsi + 1];
+            td[i + 2] = td[rsi + 2];
+            td[i + 3] = td[rsi + 3];
+          }
+        }
+      }
+
+      templateCtx.putImageData(templatePixels, 0, 0);
+
+      // 4) The complete REAL template is still uniformly scaled/centred so both
+      // outer sleeves remain inside the 3:4 canvas. Only the small collar opening
+      // above was adapted; epaulettes, pins, ribbons, buttons, sleeves and torso
+      // stay exactly from the source template.
       const tw = 900 * templateScale;
       const th = 1200 * templateScale;
       const tx = (900 - tw) / 2;
-      // Keep the template's top edge/collar height at the same visual level.
       const originalTop = 524;
       const ty = originalTop - originalTop * templateScale;
-      ctx.drawImage(template, tx, ty, tw, th);
+      ctx.drawImage(templateCanvas, tx, ty, tw, th);
 
       return canvas.toDataURL("image/png");
     } finally {
@@ -1061,6 +1215,7 @@ export default function Home() {
         ? await composeOfficialExactTemplate(
             await officialPersonToTransparent(data.image),
             outfit.image,
+            outfit.id,
           )
         : await normalizeAiResultToThreeFour(
             await chromaKeyToTransparent(data.image),
