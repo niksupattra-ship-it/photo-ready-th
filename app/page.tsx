@@ -917,77 +917,6 @@ export default function Home() {
     return canvas.toDataURL("image/png");
   }
 
-
-  async function adaptiveMeshWarpTemplate(
-    template: HTMLImageElement,
-    shoulderScale: number,
-    shoulderCenterX = 450,
-  ) {
-    // Adaptive Template / Mesh Warping
-    // --------------------------------
-    // The real uniform pixels are preserved and geometrically re-mapped.
-    // We do NOT ask generative AI to redraw the uniform.  Horizontal stretch
-    // is strongest around the shoulders/chest and eases toward the collar and
-    // lower torso so the result follows human anatomy instead of looking like
-    // one globally-resized PNG.
-    const source = document.createElement("canvas");
-    source.width = 900;
-    source.height = 1200;
-    const sc = source.getContext("2d");
-    if (!sc) throw new Error("เตรียม Mesh Template ไม่ได้");
-    sc.imageSmoothingEnabled = true;
-    sc.imageSmoothingQuality = "high";
-    sc.drawImage(template, 0, 0, 900, 1200);
-
-    const output = document.createElement("canvas");
-    output.width = 900;
-    output.height = 1200;
-    const oc = output.getContext("2d");
-    if (!oc) throw new Error("สร้าง Adaptive Template ไม่ได้");
-    oc.imageSmoothingEnabled = true;
-    oc.imageSmoothingQuality = "high";
-
-    // Safety: normal portrait fitting should only need modest deformation.
-    const safeShoulderScale = Math.max(0.88, Math.min(1.12, shoulderScale));
-
-    const smoothstep = (t: number) => {
-      const x = Math.max(0, Math.min(1, t));
-      return x * x * (3 - 2 * x);
-    };
-
-    const scaleAtY = (y: number) => {
-      // Keep collar/neck anchor nearly unchanged.
-      if (y <= 500) return 1;
-      if (y < 620) {
-        const t = smoothstep((y - 500) / 120);
-        return 1 + (safeShoulderScale - 1) * t * 0.72;
-      }
-      // Maximum adaptation across shoulder/chest.
-      if (y <= 790) return safeShoulderScale;
-      // Ease into a slightly milder torso deformation.
-      const torsoScale = 1 + (safeShoulderScale - 1) * 0.78;
-      if (y < 1050) {
-        const t = smoothstep((y - 790) / 260);
-        return safeShoulderScale + (torsoScale - safeShoulderScale) * t;
-      }
-      return torsoScale;
-    };
-
-    // Small horizontal strips act like a light-weight mesh. Each strip is
-    // transformed independently, producing a continuous non-rigid deformation
-    // while keeping the source uniform's texture, colour and insignia pixels.
-    const stripH = 3;
-    for (let y = 0; y < 1200; y += stripH) {
-      const h = Math.min(stripH, 1200 - y);
-      const scaleX = scaleAtY(y + h / 2);
-      const destW = 900 * scaleX;
-      const destX = shoulderCenterX - shoulderCenterX * scaleX;
-      oc.drawImage(source, 0, y, 900, h, destX, y, destW, h);
-    }
-
-    return output;
-  }
-
   async function composeOfficialExactTemplate(
     personSrc: string,
     templateSrc: string,
@@ -1016,7 +945,7 @@ export default function Home() {
       const face = detector.detect(person).detections[0]?.boundingBox;
       if (!face) throw new Error("ไม่พบใบหน้าหลังประมวลผล");
 
-      const isMale = /male|men|ชาย/.test(outfitId);
+      const isMale = /male|ชาย/.test(outfitId);
 
       const canvas = document.createElement("canvas");
       canvas.width = 900;
@@ -1087,23 +1016,11 @@ export default function Home() {
 
       // Detect the central transparent neck/collar opening around the expected
       // collar area. We use the widest centre-connected transparent run.
-      const jobCollarY: Record<string, number> = {
-        "job-women-polite": 310,
-        "job-women-open": 650,
-        "job-women-wide": 650,
-        "job-women-mandarin": 650,
-        "job-men-polite": 330,
-        "job-men-open": 350,
-        "job-white-women": 330,
-        "job-white-men": 330,
-      };
-      let collarJoinY = jobCollarY[outfitId] ?? 620;
+      let collarJoinY = 620;
       let collarOpeningWidth = 92;
       let bestScore = -1;
-      const collarScanStart = Math.max(180, collarJoinY - 90);
-      const collarScanEnd = Math.min(760, collarJoinY + 90);
 
-      for (let y = collarScanStart; y <= collarScanEnd; y += 2) {
+      for (let y = 560; y <= 660; y += 2) {
         if (alphaAt(450, y) > 40) continue;
 
         let left = 450;
@@ -1116,7 +1033,7 @@ export default function Home() {
 
         // Prefer a useful lower-collar width around 70–130px.
         const widthScore = 1 - Math.min(1, Math.abs(width - 95) / 95);
-        const yScore = 1 - Math.min(1, Math.abs(y - collarJoinY) / 100);
+        const yScore = 1 - Math.min(1, Math.abs(y - 620) / 100);
         const score = widthScore * 0.65 + yScore * 0.35;
 
         if (score > bestScore) {
@@ -1191,7 +1108,7 @@ export default function Home() {
       // head/hair unit visibly too small against this fixed government template.
       // Use a slightly larger, still natural head scale while preserving the
       // entire head+hair as ONE unit (never enlarge facial features separately).
-      const shoulderToHeadRatio = isMale ? 2.02 : 1.48;
+      const shoulderToHeadRatio = isMale ? 2.08 : 1.72;
 
       const targetHeadWidth =
         measuredShoulderWidth / shoulderToHeadRatio;
@@ -1200,8 +1117,8 @@ export default function Home() {
 
       // Keep the adjustment within a realistic safety range relative to face size.
       const targetFaceHeight = face.height * personScale;
-      const minFaceHeight = isMale ? 182 : 188;
-      const maxFaceHeight = isMale ? 225 : 228;
+      const minFaceHeight = isMale ? 176 : 180;
+      const maxFaceHeight = isMale ? 208 : 206;
 
       if (targetFaceHeight < minFaceHeight) {
         personScale *= minFaceHeight / Math.max(1, targetFaceHeight);
@@ -1290,8 +1207,8 @@ export default function Home() {
         ),
       );
 
-      const collarStartY = Math.max(160, collarJoinY - 78);
-      const collarEndY = Math.min(760, collarJoinY + 38);
+      const collarStartY = Math.max(520, collarJoinY - 78);
+      const collarEndY = Math.min(680, collarJoinY + 38);
 
       for (let y = collarStartY; y <= collarEndY; y++) {
         if (adaptiveAlphaAt(450, y) > 40) continue;
@@ -1535,11 +1452,8 @@ export default function Home() {
         maskCtx.globalCompositeOperation = "source-over";
         maskCtx.fillStyle = "#000";
 
-        // Lock a larger identity core so AI cannot repaint eyes, nose, lips,
-        // cheeks or most of the jaw.  Hairline and the lowest jaw/neck transition
-        // stay editable so the neck can still be joined naturally.
-        const lockedFaceWidth = face.width * scale * 0.90;
-        const lockedFaceHeight = face.height * scale * 0.82;
+        const lockedFaceWidth = face.width * scale * 0.80;
+        const lockedFaceHeight = face.height * scale * 0.72;
         maskCtx.beginPath();
         maskCtx.ellipse(
           targetFaceCenterX,
@@ -1610,7 +1524,7 @@ export default function Home() {
       const face = detector.detect(aiPatch).detections[0]?.boundingBox;
       if (!face) throw new Error("ไม่พบใบหน้าหลัง AI ปรับ");
 
-      const isMale = /male|men|ชาย/.test(outfitId);
+      const isMale = /male|ชาย/.test(outfitId);
 
       const canvas = document.createElement("canvas");
       canvas.width = 900;
@@ -1708,136 +1622,93 @@ export default function Home() {
       const originalTop = 524;
       const ty = originalTop - originalTop * templateScale;
 
-      let finalShoulderWidth = shoulderWidth * templateScale;
+      const finalShoulderWidth = shoulderWidth * templateScale;
       const finalShoulderCenterX =
         tx + shoulderCenterX * templateScale;
       const finalCollarY = ty + collarY * templateScale;
-      let finalCollarWidth = collarWidth * templateScale;
+      const finalCollarWidth = collarWidth * templateScale;
 
       // ------------------------------------------------------------
-      // Compute human proportions from the REAL template + complete head.
-      // AUTO-BALANCE RULES (one pass):
-      //   1) scale the whole head/hair unit from shoulder width,
-      //   2) keep face height inside a photographic ID range,
-      //   3) derive neck width from both face anatomy and collar opening,
-      //   4) shorten the visible neck so it never looks stretched.
-      // Nothing here resizes facial features independently.
+      // Compute human proportions from template + actual AI face.
       // ------------------------------------------------------------
-      const patchMeasureForHead = document.createElement("canvas");
-      patchMeasureForHead.width = aiPatch.naturalWidth || aiPatch.width;
-      patchMeasureForHead.height = aiPatch.naturalHeight || aiPatch.height;
-      const headMeasureCtx = patchMeasureForHead.getContext("2d", {
-        willReadFrequently: true,
-      });
-      if (!headMeasureCtx) throw new Error("วัดสัดส่วนศีรษะไม่ได้");
-      headMeasureCtx.drawImage(aiPatch, 0, 0);
-      const headPixels = headMeasureCtx.getImageData(
-        0,
-        0,
-        patchMeasureForHead.width,
-        patchMeasureForHead.height,
-      ).data;
+      // REFERENCE-PROPORTION LOCK:
+      // Match the approved reference portrait supplied by the user.
+      // In that reference the FEMALE face width is ~38–39% of the visible
+      // shoulder width (not ~31% as before). The previous ratio is the direct
+      // reason the head kept coming out too small.
+      //
+      // Scale the COMPLETE head/hair/neck as one unit. Never resize facial
+      // features independently.
+      const faceToShoulderRatio = isMale ? 0.335 : 0.385;
+      const desiredFaceWidth =
+        finalShoulderWidth * faceToShoulderRatio;
 
-      // Measure only the head/hair silhouette around the detected face.
-      // This avoids using the neck as part of the head width.
-      const headSearchTop = Math.max(0, Math.floor(face.originY - face.height * 0.90));
-      const headSearchBottom = Math.min(
-        patchMeasureForHead.height - 1,
-        Math.ceil(face.originY + face.height * 1.08),
-      );
-      const headSearchLeft = Math.max(0, Math.floor(face.originX - face.width * 0.95));
-      const headSearchRight = Math.min(
-        patchMeasureForHead.width - 1,
-        Math.ceil(face.originX + face.width * 1.95),
-      );
+      let personScale =
+        desiredFaceWidth / Math.max(1, face.width);
 
-      let headLeft = patchMeasureForHead.width;
-      let headRight = -1;
-      for (let y = headSearchTop; y <= headSearchBottom; y++) {
-        for (let x = headSearchLeft; x <= headSearchRight; x++) {
-          const a = headPixels[(y * patchMeasureForHead.width + x) * 4 + 3];
-          if (a > 24) {
-            if (x < headLeft) headLeft = x;
-            if (x > headRight) headRight = x;
-          }
-        }
+      // Reference-calibrated face-height guardrails. These are intentionally
+      // larger than the old values so the head matches the approved portrait
+      // while still preventing an oversized head.
+      let desiredFaceHeight = face.height * personScale;
+      const minFaceHeight = isMale ? 245 : 250;
+      const maxFaceHeight = isMale ? 300 : 305;
+
+      if (desiredFaceHeight < minFaceHeight) {
+        personScale *= minFaceHeight / Math.max(1, desiredFaceHeight);
+      } else if (desiredFaceHeight > maxFaceHeight) {
+        personScale *= maxFaceHeight / desiredFaceHeight;
       }
-
-      const measuredHeadWidth =
-        headRight > headLeft
-          ? headRight - headLeft + 1
-          : face.width * (isMale ? 1.45 : 1.62);
-
-      // ADAPTIVE-TEMPLATE RULE:
-      // Keep the PERSON natural and let the REAL uniform move toward the person.
-      // We establish portrait framing from the detected face height with ONE
-      // uniform scale.  The face is never stretched horizontally or vertically.
-      const targetFaceHeight = isMale ? 252 : 258;
-      let personScale = targetFaceHeight / Math.max(1, face.height);
-      personScale = Math.max(0.74, Math.min(1.52, personScale));
 
       const scaledFaceWidth = face.width * personScale;
       const scaledFaceHeight = face.height * personScale;
-      const scaledHeadWidth = measuredHeadWidth * personScale;
 
-      // A natural studio portrait usually reads best when the COMPLETE head/hair
-      // occupies about 44–47% of the visible shoulder span.  Instead of resizing
-      // the head to a fixed PNG, calculate the shoulder span that THIS head needs.
-      const targetHeadToShoulder = isMale ? 0.44 : 0.46;
-      const desiredShoulderWidth =
-        scaledHeadWidth / Math.max(0.01, targetHeadToShoulder);
-
-      // Mesh deformation is deliberately bounded.  Up to 12% is enough to adapt
-      // body proportion while keeping real cloth texture, ribbons, buttons and
-      // insignia visually faithful to the source template.
-      const meshShoulderFactor = Math.max(
-        0.88,
-        Math.min(1.12, desiredShoulderWidth / Math.max(1, finalShoulderWidth)),
-      );
-
-      const adaptiveTemplate = await adaptiveMeshWarpTemplate(
-        template,
-        meshShoulderFactor,
-        shoulderCenterX,
-      );
-
-      finalShoulderWidth *= meshShoulderFactor;
-      // Collar opening follows only part of shoulder deformation, because a real
-      // collar is structurally stiffer than the chest/shoulder fabric.
-      finalCollarWidth *= 1 + (meshShoulderFactor - 1) * 0.72;
-
-      // Neck anatomy: the old value was too narrow and made the head look
-      // pasted onto the uniform.  Use a wider anatomical base, then let the
-      // real collar opening set the minimum width at the bottom of the neck.
+      // Neck width comes from both the actual face and the real template collar.
+      // Give slightly more weight to anatomy so the neck does not look pinched
+      // just because the template opening is narrow.
       const anatomicalNeckWidth =
-        scaledFaceWidth * (isMale ? 0.59 : 0.56);
+        scaledFaceWidth * (isMale ? 0.49 : 0.46);
+
+      // COLLAR-FILL RULE:
+      // The visible neck must actually fill the real template opening.
+      // Use the measured collar opening as the minimum lower-neck target,
+      // while still respecting anatomy so the neck never becomes a straight
+      // rectangular block.
       const collarDrivenNeckWidth =
-        finalCollarWidth * (isMale ? 0.97 : 0.96);
+        finalCollarWidth * (isMale ? 0.96 : 0.94);
+
       const targetNeckWidth = Math.max(
-        isMale ? 92 : 84,
+        isMale ? 88 : 80,
         Math.min(
-          isMale ? 132 : 120,
-          Math.max(anatomicalNeckWidth, collarDrivenNeckWidth),
+          isMale ? 128 : 116,
+          Math.max(
+            anatomicalNeckWidth,
+            collarDrivenNeckWidth,
+          ),
         ),
       );
 
-      // Shorter visible neck = more natural connection to a formal uniform.
-      // The lower portion sits behind the real collar, so no artificial seam
-      // or blue gap can appear.
+      // Natural neck length, with enough overlap below the real collar so no
+      // blue/background gap can remain between skin and uniform.
       const targetNeckLength =
-        scaledFaceHeight * (isMale ? 0.31 : 0.29);
-      const underCollarOverlap = isMale ? 28 : 30;
+        scaledFaceHeight * (isMale ? 0.34 : 0.35);
+      const underCollarOverlap = isMale ? 22 : 26;
 
       const targetJawY =
-        finalCollarY - targetNeckLength + underCollarOverlap;
+        finalCollarY -
+        targetNeckLength +
+        underCollarOverlap;
 
-      const sourceFaceCenterX = face.originX + face.width / 2;
-      const sourceJawY = face.originY + face.height;
+      const sourceFaceCenterX =
+        face.originX + face.width / 2;
+      const sourceJawY =
+        face.originY + face.height;
 
       const dx =
-        finalShoulderCenterX - sourceFaceCenterX * personScale;
+        finalShoulderCenterX -
+        sourceFaceCenterX * personScale;
       const dy =
-        targetJawY - sourceJawY * personScale;
+        targetJawY -
+        sourceJawY * personScale;
 
       // ------------------------------------------------------------
       // Measure the ACTUAL AI neck width below the jaw.
@@ -1904,7 +1775,7 @@ export default function Home() {
       const neckHorizontalScale = Math.max(
         1,
         Math.min(
-          1.18,
+          1.28,
           targetNeckWidth / Math.max(1, renderedAiNeckWidth),
         ),
       );
@@ -2004,112 +1875,15 @@ export default function Home() {
         ctx.drawImage(neckLayer, 0, 0);
       }
 
-      // ...then the REAL template on top after bounded adaptive mesh warping.
-      // This hides the lower neck under the collar naturally.  The uniform is
-      // still made from the source template pixels; generative AI does not redraw
-      // shoulder boards, insignia, ribbons, tie, buttons, sleeves or fabric.
-      ctx.drawImage(adaptiveTemplate, tx, ty, tw, th);
+      // ...then the exact REAL template on top. This hides the lower neck under
+      // the collar naturally. No AI-generated shoulder board, insignia, ribbon,
+      // tie, button, sleeve or outer uniform is used.
+      ctx.drawImage(template, tx, ty, tw, th);
 
       return canvas.toDataURL("image/png");
     } finally {
       detector.close();
     }
-  }
-
-  async function restoreOriginalFacePixels(sourceSrc: string, resultSrc: string) {
-    const [{ FilesetResolver, FaceDetector }, source, result] = await Promise.all([
-      import("@mediapipe/tasks-vision"),
-      loadImage(sourceSrc),
-      loadImage(resultSrc),
-    ]);
-    const vision = await FilesetResolver.forVisionTasks(
-      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm",
-    );
-    const detector = await FaceDetector.createFromOptions(vision, {
-      baseOptions: {
-        modelAssetPath:
-          "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/latest/blaze_face_short_range.tflite",
-      },
-      runningMode: "IMAGE",
-      minDetectionConfidence: 0.5,
-    });
-    try {
-      const sf = detector.detect(source).detections[0]?.boundingBox;
-      const rf = detector.detect(result).detections[0]?.boundingBox;
-      if (!sf || !rf) return resultSrc;
-
-      const canvas = document.createElement("canvas");
-      canvas.width = result.naturalWidth || result.width;
-      canvas.height = result.naturalHeight || result.height;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return resultSrc;
-      ctx.drawImage(result, 0, 0);
-
-      // Protect only the identity-critical central face. Hairline and jaw/neck edges
-      // remain available for the AI/template transition, avoiding a pasted-face seam.
-      const sx = sf.originX + sf.width * 0.055;
-      const sy = sf.originY + sf.height * 0.10;
-      const sw = sf.width * 0.89;
-      const sh = sf.height * 0.80;
-
-      // IMPORTANT: restore the real face with ONE UNIFORM scale.
-      // Never stretch X and Y independently because that subtly changes eye
-      // spacing, nose shape, jaw width and the user's real facial structure.
-      const scaleX = rf.width / Math.max(1, sf.width);
-      const scaleY = rf.height / Math.max(1, sf.height);
-      const identityScale = scaleX * 0.55 + scaleY * 0.45;
-      const dw = sw * identityScale;
-      const dh = sh * identityScale;
-      const resultFaceCenterX = rf.originX + rf.width / 2;
-      const resultFaceCenterY = rf.originY + rf.height * 0.50;
-      const dx = resultFaceCenterX - dw / 2;
-      const dy = resultFaceCenterY - dh * 0.50;
-
-      const patch = document.createElement("canvas");
-      patch.width = canvas.width;
-      patch.height = canvas.height;
-      const pc = patch.getContext("2d");
-      if (!pc) return resultSrc;
-      pc.imageSmoothingEnabled = true;
-      pc.imageSmoothingQuality = "high";
-      pc.drawImage(source, sx, sy, sw, sh, dx, dy, dw, dh);
-
-      const mask = document.createElement("canvas");
-      mask.width = canvas.width;
-      mask.height = canvas.height;
-      const mc = mask.getContext("2d");
-      if (!mc) return resultSrc;
-      mc.filter = `blur(${Math.max(5, Math.round(rf.width * 0.025))}px)`;
-      mc.fillStyle = "white";
-      mc.beginPath();
-      mc.ellipse(
-        rf.originX + rf.width / 2,
-        rf.originY + rf.height * 0.515,
-        rf.width * 0.445,
-        rf.height * 0.395,
-        0,
-        0,
-        Math.PI * 2,
-      );
-      mc.fill();
-      pc.globalCompositeOperation = "destination-in";
-      pc.drawImage(mask, 0, 0);
-      pc.globalCompositeOperation = "source-over";
-      ctx.drawImage(patch, 0, 0);
-      return canvas.toDataURL("image/png");
-    } finally {
-      detector.close();
-    }
-  }
-
-  async function composeJobExactTemplate(
-    personSrc: string,
-    templateSrc: string,
-    outfitId: string,
-  ) {
-    // Reuse the geometry-tested template compositor, but feed job-specific sex
-    // hints through the outfit id. The outfit itself is never AI-generated.
-    return composeOfficialExactTemplate(personSrc, templateSrc, outfitId);
   }
 
   async function aiEdit() {
@@ -2126,9 +1900,41 @@ export default function Home() {
     try {
       const isOfficialTemplate = outfit.id.startsWith("official-");
       const isJobApplication = outfit.category === "สมัครงาน";
-      const templatePersonMode = isJobApplication || isOfficialTemplate;
       const source = await fetch(baseOriginal);
       const sourceBlob = await source.blob();
+
+      // OFFICIAL IDENTITY-SAFE MODE:
+      // For government uniforms, never regenerate or re-layer the face.
+      // Use the uploaded source person pixels exactly once, with a uniform
+      // scale/translation only, then adapt the real template around the neck.
+      // This removes the double-face/ghost-eye failure mode entirely and also
+      // avoids spending an AI request when the user is not changing hairstyle.
+      if (isOfficialTemplate && !aiSelected.includes("hairstyle")) {
+        setProcessMessage("กำลังจัดสัดส่วนศีรษะ–คอ–ชุดจากภาพจริง โดยไม่สร้างใบหน้าใหม่…");
+        const sourceCutout = await makeTransparentCutout(baseOriginal);
+        const localResult = await composeOfficialExactTemplate(
+          sourceCutout,
+          outfit.image,
+          outfit.id,
+        );
+        setOriginal(localResult);
+        setZoom(100);
+        setX(0);
+        setY(0);
+        setAiBaseImage(localResult);
+        setAiComposited(true);
+        setCutout(null);
+        setBefore(false);
+        void prepareComparison(baseOriginal, localResult);
+        setProcessMessage(
+          "สำเร็จ — ใช้ใบหน้า/ผิว/ศีรษะจากต้นฉบับ 100% และปรับชุดจริงเข้าหาคนโดยไม่สร้างหน้าซ้ำ",
+        );
+        return;
+      }
+
+      // Hairstyle editing still uses a single AI request. The final composition
+      // remains template-controlled; all ordinary official outfit fitting above
+      // is fully deterministic and identity-safe.
 
       // Official mode still uses ONE AI request only. Instead of sending a
       // separate uniform reference, build one local composite that already
@@ -2143,9 +1949,10 @@ export default function Home() {
 
       const blob = isOfficialTemplate
         ? officialPrepared!.imageBlob
-        : templatePersonMode
-          ? await prepareOfficialPortraitInputBlob(sourceBlob)
-          : await optimizeAiInputBlob(sourceBlob, 1536);
+        : await optimizeAiInputBlob(
+            sourceBlob,
+            isJobApplication ? 1280 : 1536,
+          );
 
       const form = new FormData();
       form.append("image", blob, "portrait.png");
@@ -2154,7 +1961,7 @@ export default function Home() {
       }
 
       // All existing non-official/job-application behaviour remains unchanged.
-      if (!isOfficialTemplate && !templatePersonMode) {
+      if (!isOfficialTemplate) {
         const outfitSource = await fetch(outfit.image);
         const outfitSourceBlob = await outfitSource.blob();
         const outfitBlob = await optimizeAiInputBlob(
@@ -2166,7 +1973,6 @@ export default function Home() {
       form.append("outfitLabel", `${outfit.label} (${outfit.sub})`);
       form.append("outfitId", outfit.id);
       form.append("outfitCategory", outfit.category);
-      form.append("templatePersonMode", templatePersonMode ? "1" : "0");
       form.append("operations", JSON.stringify(aiSelected));
       form.append("hairVolume", hairVolume);
       form.append("skinStyle", skinStyle);
@@ -2198,40 +2004,16 @@ export default function Home() {
       if (data.usage) {
         console.info("[PhotoID AI usage]", data.usage);
       }
-      let normalizedImage: string;
-      if (isOfficialTemplate) {
-        const officialComposite = await finalizeOfficialAiBalancedResult(
-          data.image,
-          outfit.image,
-          outfit.id,
-        );
-        // Final identity lock: put the original photographic face pixels back
-        // after ALL AI and geometry work.  AI may create hair/neck transition,
-        // but eyes, nose, lips, cheeks, facial structure and natural skin remain
-        // from the uploaded photo.
-        normalizedImage = await restoreOriginalFacePixels(
-          baseOriginal,
-          officialComposite,
-        );
-      } else if (templatePersonMode) {
-        setProcessMessage("กำลังประกอบใบหน้า/คอกับไฟล์ชุดจริงโดยไม่ให้ AI วาดชุดใหม่…");
-        const personLayer = await officialPersonToTransparent(data.image);
-        const exactTemplateComposite = await composeJobExactTemplate(
-          personLayer,
-          outfit.image,
-          outfit.id,
-        );
-        normalizedImage = await restoreOriginalFacePixels(
-          baseOriginal,
-          exactTemplateComposite,
-        );
-      } else {
-        normalizedImage = await normalizeAiResultToThreeFour(
-          await chromaKeyToTransparent(data.image),
-          bg,
-        );
-        normalizedImage = await restoreOriginalFacePixels(baseOriginal, normalizedImage);
-      }
+      const normalizedImage = isOfficialTemplate
+        ? await finalizeOfficialAiBalancedResult(
+            data.image,
+            outfit.image,
+            outfit.id,
+          )
+        : await normalizeAiResultToThreeFour(
+            await chromaKeyToTransparent(data.image),
+            bg,
+          );
       setOriginal(normalizedImage);
       setZoom(100);
       setX(0);
@@ -2244,9 +2026,7 @@ export default function Home() {
       setProcessMessage(
         outfit.id.startsWith("official-")
           ? "สำเร็จ — ใช้เทมเพลตชุดข้าราชการจริง และปรับคน/คอให้สมดุล"
-          : isJobApplication
-            ? "สำเร็จ — ล็อกใบหน้าเดิมและประกอบด้วยไฟล์ชุดจริงแล้ว"
-            : "AI ปรับภาพสำเร็จแล้ว",
+          : "AI ปรับภาพแบบ V3 สำเร็จแล้ว",
       );
     } catch (e) {
       setProcessMessage(
