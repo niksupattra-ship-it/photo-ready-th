@@ -1894,12 +1894,27 @@ export default function Home() {
     setAiProcessing(true);
     setProcessMessage(
       outfit.id.startsWith("official-")
-        ? "AI กำลังปรับคนให้เข้ากับเทมเพลตชุดข้าราชการจริง โดยล็อกรายละเอียดชุด…"
+        ? hairstyle !== "original"
+          ? `AI กำลังเปลี่ยนทรงผมเป็น ${hairstyleOptions.find((o) => o.id === hairstyle)?.label ?? hairstyle} และประกอบกับชุดจริง…`
+          : "กำลังจัดสัดส่วนคนกับเทมเพลตชุดข้าราชการจริง โดยไม่สร้างใบหน้าใหม่…"
         : "AI กำลังปรับภาพจริง อาจใช้เวลาประมาณ 30–90 วินาที…",
     );
     try {
       const isOfficialTemplate = outfit.id.startsWith("official-");
       const isJobApplication = outfit.category === "สมัครงาน";
+
+      // Selecting a hairstyle thumbnail MUST be sufficient by itself.
+      // Previously the thumbnail state and the hidden AI-operation state could
+      // disagree, causing official mode to take the deterministic/no-AI branch
+      // and return a picture that looked unchanged.
+      const wantsHairstyleChange = hairstyle !== "original";
+      const effectiveOperations = Array.from(
+        new Set([
+          ...aiSelected.filter((op) => op !== "hairstyle"),
+          ...(wantsHairstyleChange ? ["hairstyle"] : []),
+        ]),
+      );
+
       const source = await fetch(baseOriginal);
       const sourceBlob = await source.blob();
 
@@ -1909,7 +1924,7 @@ export default function Home() {
       // scale/translation only, then adapt the real template around the neck.
       // This removes the double-face/ghost-eye failure mode entirely and also
       // avoids spending an AI request when the user is not changing hairstyle.
-      if (isOfficialTemplate && !aiSelected.includes("hairstyle")) {
+      if (isOfficialTemplate && !wantsHairstyleChange) {
         setProcessMessage("กำลังจัดสัดส่วนศีรษะ–คอ–ชุดจากภาพจริง โดยไม่สร้างใบหน้าใหม่…");
         const sourceCutout = await makeTransparentCutout(baseOriginal);
         const localResult = await composeOfficialExactTemplate(
@@ -1973,7 +1988,7 @@ export default function Home() {
       form.append("outfitLabel", `${outfit.label} (${outfit.sub})`);
       form.append("outfitId", outfit.id);
       form.append("outfitCategory", outfit.category);
-      form.append("operations", JSON.stringify(aiSelected));
+      form.append("operations", JSON.stringify(effectiveOperations));
       form.append("hairVolume", hairVolume);
       form.append("skinStyle", skinStyle);
       form.append("skinStrength", String(skinStrength));
@@ -1981,7 +1996,7 @@ export default function Home() {
         (option) => option.id === hairstyle,
       );
       form.append("hairstyle", selectedHairstyle?.label || "ทรงเดิม");
-      if (aiSelected.includes("hairstyle") && selectedHairstyle?.image) {
+      if (wantsHairstyleChange && selectedHairstyle?.image) {
         const hairstyleSource = await fetch(selectedHairstyle.image);
         const hairstyleSourceBlob = await hairstyleSource.blob();
         const hairstyleBlob = await optimizeAiInputBlob(
@@ -2025,7 +2040,9 @@ export default function Home() {
       void prepareComparison(baseOriginal, normalizedImage);
       setProcessMessage(
         outfit.id.startsWith("official-")
-          ? "สำเร็จ — ใช้เทมเพลตชุดข้าราชการจริง และปรับคน/คอให้สมดุล"
+          ? hairstyle !== "original"
+            ? `สำเร็จ — เปลี่ยนทรงผมเป็น ${selectedHairstyle?.label ?? hairstyle} และประกอบกับเทมเพลตชุดข้าราชการจริงแล้ว`
+            : "สำเร็จ — ใช้เทมเพลตชุดข้าราชการจริง และปรับคน/คอให้สมดุล"
           : "AI ปรับภาพแบบ V3 สำเร็จแล้ว",
       );
     } catch (e) {
