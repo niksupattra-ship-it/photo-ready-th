@@ -777,7 +777,7 @@ export default function Home() {
         throw new Error("ไม่พบใบหน้า กรุณาใช้รูปหน้าตรงที่เห็นใบหน้าชัด");
       }
 
-      // Deterministic cutout only; no generative AI is used for government uniforms.
+      // Government uniform itself is deterministic and locked. AI will be used later only inside a small neck/collar mask.
       const personCutoutSrc = await makeTransparentCutout(baseOriginal);
       const personImage = await loadImage(personCutoutSrc);
 
@@ -801,12 +801,53 @@ export default function Home() {
       const drawX = targetFaceCenterX - sourceFaceCenterX * scale;
       const drawY = targetFaceCenterY - sourceFaceCenterY * scale;
 
-      // Keep only the head/hair/neck zone from the uploaded person. The real
-      // uniform template is drawn above it, so source clothing cannot replace
-      // insignia, epaulettes, ribbons, buttons or garment construction.
+      // Keep ONLY the uploaded head/hair/neck. Never carry the original
+      // shoulders, blouse or torso into an official-uniform composition.
+      //
+      // The previous wide rectangular clip allowed the source shirt/shoulders
+      // to remain visible through the template's neck opening. Use a two-zone
+      // anatomical mask instead:
+      //   1) head + hair around the face
+      //   2) a narrow neck corridor that reaches the uniform collar
+      //
+      // This is deterministic Canvas compositing only; no AI/generative edit.
+      const targetFaceWidth = face.width * scale;
+      const headHalfWidth = Math.max(190, targetFaceWidth * 0.92);
+      const headTop = Math.max(25, targetFaceCenterY - targetFaceHeight * 1.05);
+      const headBottom = targetFaceCenterY + targetFaceHeight * 0.92;
+
       ctx.save();
       ctx.beginPath();
-      ctx.rect(70, 0, 760, 690);
+
+      // Head/hair zone. Rounded shape leaves enough room for natural hair while
+      // excluding uploaded shoulders and chest.
+      const headLeft = targetFaceCenterX - headHalfWidth;
+      const headRight = targetFaceCenterX + headHalfWidth;
+      const headWidth = headRight - headLeft;
+      const headHeight = headBottom - headTop;
+      ctx.ellipse(
+        targetFaceCenterX,
+        headTop + headHeight * 0.52,
+        headWidth * 0.52,
+        headHeight * 0.58,
+        0,
+        0,
+        Math.PI * 2,
+      );
+
+      // Neck corridor. It is intentionally narrow so source clothing cannot
+      // leak into the collar opening. The lower width is tuned to the shared
+      // official-template collar geometry used by every rank/ministry.
+      const neckTopY = targetFaceCenterY + targetFaceHeight * 0.58;
+      const neckBottomY = 655;
+      const neckTopHalf = Math.max(78, targetFaceWidth * 0.26);
+      const neckBottomHalf = Math.max(62, targetFaceWidth * 0.21);
+      ctx.moveTo(targetFaceCenterX - neckTopHalf, neckTopY);
+      ctx.lineTo(targetFaceCenterX + neckTopHalf, neckTopY);
+      ctx.lineTo(targetFaceCenterX + neckBottomHalf, neckBottomY);
+      ctx.lineTo(targetFaceCenterX - neckBottomHalf, neckBottomY);
+      ctx.closePath();
+
       ctx.clip();
       ctx.drawImage(
         personImage,
@@ -821,7 +862,81 @@ export default function Home() {
       // re-designed. All future official templates use this same 3:4 placement.
       ctx.drawImage(templateImage, 0, 0, 900, 1200);
 
-      const result = canvas.toDataURL("image/png");
+      // Base composite is already correct for head scale + exact real uniform.
+      // AI is used ONLY to blend the anatomical neck/collar connection through
+      // a small transparent edit mask. Everything outside the mask is locked.
+      const baseComposite = canvas.toDataURL("image/png");
+
+      setProcessMessage("กำลังปรับเฉพาะคอและรอยต่อปกเสื้อให้สมดุล…");
+
+      const maskCanvas = document.createElement("canvas");
+      maskCanvas.width = 900;
+      maskCanvas.height = 1200;
+      const maskCtx = maskCanvas.getContext("2d");
+      if (!maskCtx) throw new Error("สร้างพื้นที่ปรับคอไม่ได้");
+
+      // Opaque = protected. Transparent = AI may edit.
+      maskCtx.fillStyle = "rgba(0,0,0,1)";
+      maskCtx.fillRect(0, 0, 900, 1200);
+      maskCtx.globalCompositeOperation = "destination-out";
+
+      // Neck-only edit zone. Keep the face, hair, shoulders, insignia and the
+      // rest of the real uniform outside this zone fully protected.
+      const editCenterX = 450;
+      const editTopY = Math.max(430, targetFaceCenterY + targetFaceHeight * 0.47);
+      const editBottomY = 670;
+      const editTopHalf = Math.max(100, targetFaceWidth * 0.33);
+      const editBottomHalf = Math.max(135, targetFaceWidth * 0.43);
+
+      maskCtx.beginPath();
+      maskCtx.moveTo(editCenterX - editTopHalf, editTopY);
+      maskCtx.quadraticCurveTo(
+        editCenterX - editBottomHalf,
+        (editTopY + editBottomY) / 2,
+        editCenterX - editBottomHalf,
+        editBottomY,
+      );
+      maskCtx.lineTo(editCenterX + editBottomHalf, editBottomY);
+      maskCtx.quadraticCurveTo(
+        editCenterX + editBottomHalf,
+        (editTopY + editBottomY) / 2,
+        editCenterX + editTopHalf,
+        editTopY,
+      );
+      maskCtx.closePath();
+      maskCtx.fill();
+
+      const [compositeResponse, maskResponse] = await Promise.all([
+        fetch(baseComposite),
+        fetch(maskCanvas.toDataURL("image/png")),
+      ]);
+      const [compositeBlob, maskBlob] = await Promise.all([
+        compositeResponse.blob(),
+        maskResponse.blob(),
+      ]);
+
+      const blendForm = new FormData();
+      blendForm.append("image", compositeBlob, "official-composite.png");
+      blendForm.append("mask", maskBlob, "official-neck-mask.png");
+
+      const blendResponse = await fetch("/api/official-neck-blend", {
+        method: "POST",
+        body: blendForm,
+      });
+      const blendData = (await blendResponse.json()) as {
+        image?: string;
+        error?: string;
+      };
+
+      if (!blendResponse.ok || !blendData.image) {
+        throw new Error(
+          blendData.error || "ปรับคอและรอยต่อปกเสื้อไม่สำเร็จ",
+        );
+      }
+
+      // The API returns 2:3. Normalize only framing/canvas to the existing 3:4
+      // workflow; uniform geometry and every locked detail remain unchanged.
+      const result = await normalizeAiResultToThreeFour(blendData.image, bg);
       setOriginal(result);
       setAiBaseImage(result);
       setAiComposited(true);
@@ -832,7 +947,7 @@ export default function Home() {
       setBefore(false);
       void prepareComparison(baseOriginal, result);
       setProcessMessage(
-        "จัดชุดจริงสำเร็จ — ใช้เทมเพลตข้าราชการโดยไม่สร้างชุดใหม่ด้วย AI",
+        "สำเร็จ — ใช้ชุดจริงและ AI ปรับเฉพาะคอ/รอยต่อปกเสื้อ",
       );
     } catch (e) {
       setProcessMessage(
